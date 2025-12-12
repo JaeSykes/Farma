@@ -99,9 +99,8 @@ class RoleSelect(Select):
 
 
 class PartyView(View):
-    def __init__(self, founder_id: int = None):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.founder_id = founder_id
         self.add_item(RoleSelect())
 
     @discord.ui.button(
@@ -134,18 +133,25 @@ class PartyView(View):
         style=discord.ButtonStyle.blurple,
         custom_id="btn_new_party",
     )
-    async def new_party_button(self, button: Button, interaction: discord.Interaction):
-        if self.founder_id is None or interaction.user.id != self.founder_id:
-            await interaction.response.send_message(
-                "❌ Jen zakladatel může zahájit novou farmu!", ephemeral=True
-            )
-            return
-
+    async def new_party_button(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
         guild = bot.get_guild(SERVER_ID)
         channel = guild.get_channel(CHANNEL_ID) if guild else None
 
+        if not channel:
+            await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
+            return
+
+        # Vymaž starou party zprávu
+        if party_data["msg_id"] and channel:
+            try:
+                msg = await channel.fetch_message(party_data["msg_id"])
+                await msg.delete()
+            except Exception:
+                pass
+
+        # Vymaž starou notifikaci
         if party_data["notif_msg_id"] and channel:
             try:
                 msg = await channel.fetch_message(party_data["notif_msg_id"])
@@ -153,8 +159,13 @@ class PartyView(View):
             except Exception:
                 pass
 
+        # Reset party
         party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
+        party_data["msg_id"] = None
+        party_data["notif_msg_id"] = None
+        party_data["founder_id"] = None
 
+        # Zobraz výběr lokace
         embed = discord.Embed(
             title="🌍 Vyber lokaci pro novou farmu",
             description="Kde chceš farmit?",
@@ -242,12 +253,12 @@ async def update_party_embed():
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
-            await msg.edit(embed=embed, view=PartyView(founder_id=party_data["founder_id"]))
+            await msg.edit(embed=embed, view=PartyView())
         except Exception:
-            msg = await channel.send(embed=embed, view=PartyView(founder_id=party_data["founder_id"]))
+            msg = await channel.send(embed=embed, view=PartyView())
             party_data["msg_id"] = msg.id
     else:
-        msg = await channel.send(embed=embed, view=PartyView(founder_id=party_data["founder_id"]))
+        msg = await channel.send(embed=embed, view=PartyView())
         party_data["msg_id"] = msg.id
 
     if total == 10:
