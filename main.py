@@ -114,7 +114,7 @@ class PartyView(View):
         style=discord.ButtonStyle.red,
         custom_id="btn_leave",
     )
-    async def leave_button(self, button: Button, interaction: discord.Interaction):
+    async def leave_button(self, interaction: discord.Interaction):
         """Tlačítko pro odhlášení z party"""
         user = interaction.user
         found = False
@@ -140,7 +140,7 @@ class PartyView(View):
         style=discord.ButtonStyle.blurple,
         custom_id="btn_new_party",
     )
-    async def new_party_button(self, button: Button, interaction: discord.Interaction):
+    async def new_party_button(self, interaction: discord.Interaction):
         """Tlačítko pro vytvoření nové farmy - dostupné komukoliv"""
         await interaction.response.defer()
 
