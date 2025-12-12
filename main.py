@@ -276,3 +276,4 @@ async def farma_cmd(interaction: discord.Interaction):
 
 
 bot.run(os.getenv("DISCORD_TOKEN"))
+
