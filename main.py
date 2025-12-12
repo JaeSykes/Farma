@@ -23,30 +23,17 @@ LOKACE = {
     "⚒️ Forge of Gods": "Forge of Gods",
 }
 
-# Role s novými emoji
+# Role s emoji které jsme vybrali
 ROLE_SLOTS = {
-    "💥 Damage Dealers": 4,
-    "🗿 Tank": 1,
-    "🎸 Swordsinger": 1,
-    "🌀 Bladedance": 1,
+    "⚔️ Damage Dealers": 4,
+    "🛡️ Tank": 1,
+    "🎵 Swordsinger": 1,
+    "💃 Bladedance": 1,
     "💚 Healer": 1,
     "🔋 Recharge": 1,
-    "💎 Buffer": 1,
-    "🕷️ Debuffer": 1,
-    "💰 Spoil": 1,
-}
-
-# Barevné indikátory pro role
-ROLE_COLORS_EMOJI = {
-    "💥 Damage Dealers": "🔴",
-    "🗿 Tank": "🔴",
-    "🕷️ Debuffer": "🔴",
-    "🎸 Swordsinger": "🔵",
-    "🌀 Bladedance": "🔵",
-    "💚 Healer": "🔵",
-    "🔋 Recharge": "🔵",
-    "💎 Buffer": "🔵",
-    "💰 Spoil": "🟡",
+    "🌟 Buffer": 1,
+    "💀 Debuffer": 1,
+    "🎁 Spoil": 1,
 }
 
 party_data = {
@@ -173,7 +160,7 @@ class PartyView(View):
             description="Kde chceš farmit?",
             color=0x0099FF,
         )
-        for emoji_lokace, lokace in LOKACE.items():
+        for emoji_lokace in LOKACE.keys():
             embed.add_field(name="•", value=emoji_lokace, inline=True)
 
         view = View()
@@ -244,10 +231,8 @@ async def update_party_embed():
         members = party_data["sloty"][role]
         member_text = ", ".join(m.mention for m in members) if members else "❌ Volné"
         
-        color_emoji = ROLE_COLORS_EMOJI.get(role, "⚪")
-        
         embed.add_field(
-            name=f"{color_emoji} {role} ({len(members)}/{max_slot})",
+            name=f"{role} ({len(members)}/{max_slot})",
             value=member_text,
             inline=False,
         )
