@@ -232,9 +232,10 @@ async def update_party_embed():
 @bot.event
 async def on_ready():
     print(f"✅ Bot {bot.user} je online!")
+    await bot.tree.sync()  # Syncuj slash commands
 
-@bot.slash_command(name="farma", description="Spustit party finder pro farmu")
-async def farma(ctx):
+@bot.tree.command(name="farma", description="Spustit party finder pro farmu")
+async def farma(interaction: discord.Interaction):
     # Zobraz lokace select
     embed = discord.Embed(
         title="🌍 Vyber lokaci pro farmu",
@@ -247,6 +248,6 @@ async def farma(ctx):
     view = View()
     view.add_item(LokaceSelect())
     
-    await ctx.respond(embed=embed, view=view, ephemeral=False)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
 bot.run(os.getenv('DISCORD_TOKEN'))
