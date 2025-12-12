@@ -138,8 +138,8 @@ class PartyView(View):
     async def new_party_button(
         self, button: Button, interaction: discord.Interaction
     ):
-        # Jen zakladatel může spustit novou farmu
-        if interaction.user.id != party_data["founder_id"]:
+        # Zkontroluj oprávnění zakladatele
+        if party_data["founder_id"] is None or interaction.user.id != party_data["founder_id"]:
             await interaction.response.send_message(
                 "❌ Jen zakladatel může zahájit novou farmu!", ephemeral=True
             )
