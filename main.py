@@ -36,9 +36,17 @@ ROLE_SLOTS = {
     "🎁 Spoil": 1,
 }
 
+REQUIRED_ROLES = {
+    "💚 Healer": True,
+    "🎵 Swordsinger": True,
+    "🌟 Buffer": True,
+    "💃 Bladedance": True,
+    "⚔️ Damage Dealers": True,  # Min 1!
+}
+
 party_data = {
     "lokace": None,
-    "cas": None,
+    "cas_timestamp": None,  # ZMĚNA: Unix timestamp místo textu
     "sloty": {role: [] for role in ROLE_SLOTS},
     "msg_id": None,
     "notif_msg_id": None,
@@ -193,9 +201,9 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání staré notifikace: {e}")
 
-    # Nastav novou farmu
+    # Nastav novou farmu - ZMĚNA: Uložíme Unix timestamp
     party_data["lokace"] = lokace
-    party_data["cas"] = datetime.now().strftime("%d.%m.%Y %H:%M")
+    party_data["cas_timestamp"] = int(datetime.now().timestamp())
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
     party_data["founder_id"] = interaction.user.id
 
@@ -222,17 +230,43 @@ async def update_party_embed():
     # Spočítej obsazení
     total = sum(len(members) for members in party_data["sloty"].values())
 
+    # ZMĚNA: Použijeme Discord timestamp - každý uživatel vidí svůj čas!
+    cas_display = f"<t:{party_data['cas_timestamp']}:f>"  # Příklad: "12. prosince 2025 v 14:04"
+
     # Vytvořit embed
     embed = discord.Embed(
         title="🎮 Společná party farma",
         description=(
             f"**Lokace:** {party_data['lokace']}\n"
-            f"**Zahájena:** {party_data['cas']}\n\n"
+            f"**Zahájena:** {cas_display}\n\n"
             "Rovnoměrná dělba dropu dle CP pravidel\n\n"
-            f"**Obsazení: {total}/10**"
+            f"**Obsazení: {total}/9**"
         ),
         color=0x0099FF,
     )
+
+    missing_roles = []
+    for role in REQUIRED_ROLES.keys():
+        members = party_data["sloty"][role]
+        
+        if role == "⚔️ Damage Dealers":
+            if len(members) == 0:
+                missing_roles.append(role)
+        else:
+            if len(members) == 0:
+                missing_roles.append(role)
+    
+    if missing_roles:
+        warning_text = "🚨 **CHYBĚJÍCÍ ROLE:**\n"
+        for role in missing_roles:
+            warning_text += f"❌ {role}\n"
+        embed.add_field(name="⚠️ STAV PARTY", value=warning_text, inline=False)
+    else:
+        embed.add_field(
+            name="✅ PARTY READY", 
+            value="Všechny klíčové role jsou obsazeny! ✨", 
+            inline=False
+        )
 
     # Přidej role s hráči
     for role, max_slot in ROLE_SLOTS.items():
@@ -261,19 +295,28 @@ async def update_party_embed():
         party_data["msg_id"] = msg.id
 
     # Oznámení když je parta plná
-    if total == 10:
-        participants = " ".join(
-            m.mention for members in party_data["sloty"].values() for m in members
-        )
-        full_embed = discord.Embed(
-            title="✅ Parta složena!",
-            description=(
-                f"Regroup u **Gatekeeper** před portem do **{party_data['lokace']}**\n\n"
-                f"Účastníci: {participants}"
-            ),
-            color=0x00FF00,
-        )
-        await channel.send(embed=full_embed)
+    if total == 9:
+        if not missing_roles:  # Jen pokud všechny klíčové role jsou obsazeny
+            participants = " ".join(
+                m.mention for members in party_data["sloty"].values() for m in members
+            )
+            full_embed = discord.Embed(
+                title="✅ Parta složena!",
+                description=(
+                    f"Regroup u **Gatekeeper** před portem do **{party_data['lokace']}**\n\n"
+                    f"Účastníci: {participants}"
+                ),
+                color=0x00FF00,
+            )
+            await channel.send(embed=full_embed)
+        else:
+            missing_text = ", ".join(missing_roles)
+            warning_embed = discord.Embed(
+                title="⚠️ Party (9/9) ale chybí role!",
+                description=f"Parta je plná, ale chybí: {missing_text}\nNěkdo se musí odhlásit a nahradit jej!",
+                color=0xFF9900,
+            )
+            await channel.send(embed=warning_embed)
 
 
 @bot.event
