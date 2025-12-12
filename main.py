@@ -13,6 +13,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "1448991981765394432"))
 SERVER_ID = int(os.getenv("SERVER_ID", "1397286059406000249"))
 
+# Lokace s emoji
 LOKACE = {
     "🐉 Dragon Valley": "Dragon Valley",
     "🐲 Lair of Antharas": "Lair of Antharas",
@@ -22,30 +23,30 @@ LOKACE = {
     "⚒️ Forge of Gods": "Forge of Gods",
 }
 
-# Nové role s emoji
+# Role s novými emoji
 ROLE_SLOTS = {
-    "⚔️ Damage Dealers": 4,
-    "🛡️ Tank": 1,
-    "🎵 Swordsinger": 1,
-    "💃 Bladedance": 1,
-    "✨ Healer": 1,
-    "🔌 Recharge": 1,
-    "🎭 Buffer": 1,
-    "☠️ Debuffer": 1,
-    "🗡️ Spoil": 1,
+    "💥 Damage Dealers": 4,
+    "🗿 Tank": 1,
+    "🎸 Swordsinger": 1,
+    "🌀 Bladedance": 1,
+    "💚 Healer": 1,
+    "🔋 Recharge": 1,
+    "💎 Buffer": 1,
+    "🕷️ Debuffer": 1,
+    "💰 Spoil": 1,
 }
 
-# Barevné indikátory pro role (🔴=Červená, 🔵=Modrá, 🟡=Žlutá)
+# Barevné indikátory pro role
 ROLE_COLORS_EMOJI = {
-    "⚔️ Damage Dealers": "🔴",
-    "🛡️ Tank": "🔴",
-    "☠️ Debuffer": "🔴",
-    "🎵 Swordsinger": "🔵",
-    "💃 Bladedance": "🔵",
-    "✨ Healer": "🔵",
-    "🔌 Recharge": "🔵",
-    "🎭 Buffer": "🔵",
-    "🗡️ Spoil": "🟡",
+    "💥 Damage Dealers": "🔴",
+    "🗿 Tank": "🔴",
+    "🕷️ Debuffer": "🔴",
+    "🎸 Swordsinger": "🔵",
+    "🌀 Bladedance": "🔵",
+    "💚 Healer": "🔵",
+    "🔋 Recharge": "🔵",
+    "💎 Buffer": "🔵",
+    "💰 Spoil": "🟡",
 }
 
 party_data = {
@@ -54,15 +55,15 @@ party_data = {
     "sloty": {role: [] for role in ROLE_SLOTS},
     "msg_id": None,
     "notif_msg_id": None,
-    "founder_id": None,  # ID zakladatele
+    "founder_id": None,
 }
 
 
 class LokaceSelect(Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label=f"{emoji} {lokace}", value=lokace)
-            for emoji, lokace in LOKACE.items()
+            discord.SelectOption(label=lokace, value=lokace)
+            for lokace in LOKACE.values()
         ]
         super().__init__(
             placeholder="Vyber lokaci pro farmu...",
@@ -121,9 +122,7 @@ class PartyView(View):
         style=discord.ButtonStyle.red,
         custom_id="btn_leave",
     )
-    async def leave_button(
-        self, button: Button, interaction: discord.Interaction
-    ):
+    async def leave_button(self, button: Button, interaction: discord.Interaction):
         user = interaction.user
         found = False
 
@@ -148,10 +147,7 @@ class PartyView(View):
         style=discord.ButtonStyle.blurple,
         custom_id="btn_new_party",
     )
-    async def new_party_button(
-        self, button: Button, interaction: discord.Interaction
-    ):
-        # Zkontroluj jestli klikl zakladatel
+    async def new_party_button(self, button: Button, interaction: discord.Interaction):
         if self.founder_id is None or interaction.user.id != self.founder_id:
             await interaction.response.send_message(
                 "❌ Jen zakladatel může zahájit novou farmu!", ephemeral=True
@@ -177,8 +173,8 @@ class PartyView(View):
             description="Kde chceš farmit?",
             color=0x0099FF,
         )
-        for emoji, lokace in LOKACE.items():
-            embed.add_field(name="•", value=f"{emoji} {lokace}", inline=True)
+        for emoji_lokace, lokace in LOKACE.items():
+            embed.add_field(name="•", value=emoji_lokace, inline=True)
 
         view = View()
         view.add_item(LokaceSelect())
@@ -211,7 +207,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     party_data["lokace"] = lokace
     party_data["cas"] = datetime.now().strftime("%d.%m.%Y %H:%M")
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
-    party_data["founder_id"] = interaction.user.id  # Uloží ID zakladatele
+    party_data["founder_id"] = interaction.user.id
 
     notif_embed = discord.Embed(
         title="🎉 Skládá se nová farm parta",
@@ -248,7 +244,6 @@ async def update_party_embed():
         members = party_data["sloty"][role]
         member_text = ", ".join(m.mention for m in members) if members else "❌ Volné"
         
-        # Přidej barevný indikátor
         color_emoji = ROLE_COLORS_EMOJI.get(role, "⚪")
         
         embed.add_field(
@@ -259,7 +254,6 @@ async def update_party_embed():
 
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
-    # Předej founder_id do PartyView
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
@@ -299,13 +293,12 @@ async def farma_cmd(interaction: discord.Interaction):
         description="Dostupné lokace:",
         color=0x0099FF,
     )
-    for emoji, lokace in LOKACE.items():
-        embed.add_field(name="•", value=f"{emoji} {lokace}", inline=True)
+    for emoji_lokace in LOKACE.keys():
+        embed.add_field(name="•", value=emoji_lokace, inline=True)
 
     view = View()
     view.add_item(LokaceSelect())
 
-    # Jen zakladatel vidí výběr lokace
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
