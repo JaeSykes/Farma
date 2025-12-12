@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ui import Select, View
+from discord.ui import Select, View, Button
 import os
 from datetime import datetime
 
@@ -114,7 +114,7 @@ class PartyView(View):
         style=discord.ButtonStyle.red,
         custom_id="btn_leave",
     )
-    async def leave_button(self, interaction: discord.Interaction):
+    async def leave_button(self, interaction: discord.Interaction, button: Button):
         """Tlačítko pro odhlášení z party"""
         user = interaction.user
         found = False
@@ -140,7 +140,7 @@ class PartyView(View):
         style=discord.ButtonStyle.blurple,
         custom_id="btn_new_party",
     )
-    async def new_party_button(self, interaction: discord.Interaction):
+    async def new_party_button(self, interaction: discord.Interaction, button: Button):
         """Tlačítko pro vytvoření nové farmy - dostupné komukoliv"""
         await interaction.response.defer()
 
