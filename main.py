@@ -39,6 +39,7 @@ party_data = {
     "sloty": {role: [] for role in ROLE_SLOTS},
     "msg_id": None,
     "notif_msg_id": None,
+    "founder_id": None,  # ID zakladatele
 }
 
 
@@ -95,8 +96,11 @@ class RoleSelect(Select):
 
 
 class PartyView(View):
-    def __init__(self):
+    def __init__(self, is_founder: bool = False):
         super().__init__(timeout=None)
+        self.is_founder = is_founder
+        
+        # Všichni vidí RoleSelect
         self.add_item(RoleSelect())
 
     @discord.ui.button(
@@ -134,6 +138,13 @@ class PartyView(View):
     async def new_party_button(
         self, button: Button, interaction: discord.Interaction
     ):
+        # Jen zakladatel může spustit novou farmu
+        if interaction.user.id != party_data["founder_id"]:
+            await interaction.response.send_message(
+                "❌ Jen zakladatel může zahájit novou farmu!", ephemeral=True
+            )
+            return
+
         await interaction.response.defer()
 
         guild = bot.get_guild(SERVER_ID)
@@ -153,10 +164,13 @@ class PartyView(View):
             description="Kde chceš farmit?",
             color=0x0099FF,
         )
+        for lokace in LOKACE.values():
+            embed.add_field(name="•", value=lokace, inline=True)
+
         view = View()
         view.add_item(LokaceSelect())
 
-        await interaction.followup.send(embed=embed, view=view)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=False)
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
@@ -184,10 +198,11 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     party_data["lokace"] = lokace
     party_data["cas"] = datetime.now().strftime("%d.%m.%Y %H:%M")
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
+    party_data["founder_id"] = interaction.user.id  # Uloží ID zakladatele
 
     notif_embed = discord.Embed(
         title="🎉 Skládá se nová farm parta",
-        description=f"do lokace **{lokace}**",
+        description=f"do lokace **{lokace}**\n\nZakladatel: {interaction.user.mention}",
         color=0x00FF00,
     )
     notif_msg = await channel.send(content="@everyone", embed=notif_embed)
@@ -230,12 +245,12 @@ async def update_party_embed():
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
-            await msg.edit(embed=embed, view=PartyView())
+            await msg.edit(embed=embed, view=PartyView(is_founder=True))
         except Exception:
-            msg = await channel.send(embed=embed, view=PartyView())
+            msg = await channel.send(embed=embed, view=PartyView(is_founder=True))
             party_data["msg_id"] = msg.id
     else:
-        msg = await channel.send(embed=embed, view=PartyView())
+        msg = await channel.send(embed=embed, view=PartyView(is_founder=True))
         party_data["msg_id"] = msg.id
 
     if total == 9:
@@ -272,7 +287,8 @@ async def farma_cmd(interaction: discord.Interaction):
     view = View()
     view.add_item(LokaceSelect())
 
-    await interaction.response.send_message(embed=embed, view=view)
+    # Jen zakladatel vidí výběr lokace
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 @bot.command()
