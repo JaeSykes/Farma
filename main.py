@@ -14,12 +14,12 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", "1448991981765394432"))
 SERVER_ID = int(os.getenv("SERVER_ID", "1397286059406000249"))
 
 LOKACE = {
-    "🐉 Dragon Valley": "Dragon Valley",
-    "🐲 Lair of Antharas": "Lair of Antharas",
-    "🕳️ Giant Cave": "Giant Cave",
-    "🌱 Seed of Annihilation": "Seed of Annihilation",
-    "🏚️ TOP Cata/Necro": "TOP Cata/Necro",
-    "⚒️ Forge of Gods": "Forge of Gods",
+    "Dragon Valley": "Dragon Valley",
+    "Lair of Antharas": "Lair of Antharas",
+    "Giant Cave": "Giant Cave",
+    "Seed of Annihilation": "Seed of Annihilation",
+    "TOP Cata/Necro": "TOP Cata/Necro",
+    "Forge of Gods": "Forge of Gods",
 }
 
 ROLE_SLOTS = {
@@ -45,8 +45,8 @@ party_data = {
 class LokaceSelect(Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label=lokace, emoji=emoji)
-            for emoji, lokace in LOKACE.items()
+            discord.SelectOption(label=lokace, value=lokace)
+            for lokace in LOKACE.values()
         ]
         super().__init__(
             placeholder="Vyber lokaci pro farmu...",
@@ -64,7 +64,7 @@ class LokaceSelect(Select):
 class RoleSelect(Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label=role, emoji="✅") for role in ROLE_SLOTS.keys()
+            discord.SelectOption(label=role, value=role) for role in ROLE_SLOTS.keys()
         ]
         super().__init__(
             placeholder="Vyber si roli v partě...",
@@ -266,8 +266,8 @@ async def farma_cmd(interaction: discord.Interaction):
         description="Dostupné lokace:",
         color=0x0099FF,
     )
-    for emoji, lokace in LOKACE.items():
-        embed.add_field(name=emoji, value=lokace, inline=True)
+    for lokace in LOKACE.values():
+        embed.add_field(name="•", value=lokace, inline=True)
 
     view = View()
     view.add_item(LokaceSelect())
