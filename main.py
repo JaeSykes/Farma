@@ -23,7 +23,7 @@ LOKACE = {
     "⚒️ Forge of Gods": "Forge of Gods",
 }
 
-# Role s emoji které jsme vybrali
+# Role s emoji
 ROLE_SLOTS = {
     "⚔️ Damage Dealers": 4,
     "🛡️ Tank": 1,
@@ -47,6 +47,7 @@ party_data = {
 
 
 class LokaceSelect(Select):
+    """Výběr lokace pro farmu"""
     def __init__(self):
         options = [
             discord.SelectOption(label=lokace, value=lokace)
@@ -66,6 +67,7 @@ class LokaceSelect(Select):
 
 
 class RoleSelect(Select):
+    """Výběr role v partě"""
     def __init__(self):
         options = [
             discord.SelectOption(label=role, value=role) for role in ROLE_SLOTS.keys()
@@ -81,16 +83,19 @@ class RoleSelect(Select):
         role = self.values[0]
         user = interaction.user
 
+        # Kontrola zda role není plná
         if len(party_data["sloty"][role]) >= ROLE_SLOTS[role]:
             await interaction.response.send_message(
                 f"❌ Role **{role}** je již obsazená!", ephemeral=True
             )
             return
 
+        # Odstranění ze všech rolí
         for r, members in party_data["sloty"].items():
             if user in members:
                 members.remove(user)
 
+        # Přidání do vybrané role
         party_data["sloty"][role].append(user)
         await interaction.response.send_message(
             f"✅ Přihlášen na roli **{role}**!", ephemeral=True
@@ -99,6 +104,7 @@ class RoleSelect(Select):
 
 
 class PartyView(View):
+    """View s tlačítky pro party"""
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RoleSelect())
@@ -109,6 +115,7 @@ class PartyView(View):
         custom_id="btn_leave",
     )
     async def leave_button(self, button: Button, interaction: discord.Interaction):
+        """Tlačítko pro odhlášení z party"""
         user = interaction.user
         found = False
 
@@ -133,7 +140,8 @@ class PartyView(View):
         style=discord.ButtonStyle.blurple,
         custom_id="btn_new_party",
     )
-    async def new_party_button(self, interaction: discord.Interaction):
+    async def new_party_button(self, button: Button, interaction: discord.Interaction):
+        """Tlačítko pro vytvoření nové farmy - dostupné komukoliv"""
         await interaction.response.defer()
 
         guild = bot.get_guild(SERVER_ID)
@@ -148,22 +156,24 @@ class PartyView(View):
             try:
                 msg = await channel.fetch_message(party_data["msg_id"])
                 await msg.delete()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"⚠️ Chyba při mazání party zprávy: {e}")
 
         # Vymaž starou notifikaci
         if party_data["notif_msg_id"] and channel:
             try:
                 msg = await channel.fetch_message(party_data["notif_msg_id"])
                 await msg.delete()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"⚠️ Chyba při mazání notifikace: {e}")
 
         # Reset party
         party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
         party_data["msg_id"] = None
         party_data["notif_msg_id"] = None
         party_data["founder_id"] = None
+        party_data["lokace"] = None
+        party_data["cas"] = None
 
         # Zobraz výběr lokace
         embed = discord.Embed(
@@ -181,32 +191,38 @@ class PartyView(View):
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
+    """Vytvoří novou farmu s vybranou lokalitou"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
     if not channel:
         print(f"❌ Kanál nenalezen! ID: {CHANNEL_ID}")
+        await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
         return
 
+    # Vymaž starou party zprávu
     if party_data["msg_id"]:
         try:
             old_msg = await channel.fetch_message(party_data["msg_id"])
             await old_msg.delete()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Chyba při mazání staré party: {e}")
 
+    # Vymaž starou notifikaci
     if party_data["notif_msg_id"]:
         try:
             old_notif = await channel.fetch_message(party_data["notif_msg_id"])
             await old_notif.delete()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Chyba při mazání staré notifikace: {e}")
 
+    # Nastav novou farmu
     party_data["lokace"] = lokace
     party_data["cas"] = datetime.now().strftime("%d.%m.%Y %H:%M")
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
     party_data["founder_id"] = interaction.user.id
 
+    # Notifikace o skládání nové party
     notif_embed = discord.Embed(
         title="🎉 Skládá se nová farm parta",
         description=f"do lokace **{lokace}**\n\nZakladatel: {interaction.user.mention}",
@@ -219,14 +235,17 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
 
 
 async def update_party_embed():
+    """Aktualizuje zprávu s party obsazením"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
     if not channel or not party_data["lokace"]:
         return
 
+    # Spočítej obsazení
     total = sum(len(members) for members in party_data["sloty"].values())
 
+    # Vytvořit embed
     embed = discord.Embed(
         title="🎮 Společná party farma",
         description=(
@@ -238,6 +257,7 @@ async def update_party_embed():
         color=0x0099FF,
     )
 
+    # Přidej role s hráči
     for role, max_slot in ROLE_SLOTS.items():
         members = party_data["sloty"][role]
         member_text = ", ".join(m.mention for m in members) if members else "❌ Volné"
@@ -250,17 +270,20 @@ async def update_party_embed():
 
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
+    # Aktualizuj nebo vytvoř novou zprávu
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
             await msg.edit(embed=embed, view=PartyView())
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Chyba při editaci party: {e}")
             msg = await channel.send(embed=embed, view=PartyView())
             party_data["msg_id"] = msg.id
     else:
         msg = await channel.send(embed=embed, view=PartyView())
         party_data["msg_id"] = msg.id
 
+    # Oznámení když je parta plná
     if total == 10:
         participants = " ".join(
             m.mention for members in party_data["sloty"].values() for m in members
@@ -278,12 +301,14 @@ async def update_party_embed():
 
 @bot.event
 async def on_ready():
+    """Spuštění bota"""
     print(f"✅ Bot {bot.user} je online!")
     await bot.tree.sync()
 
 
 @bot.tree.command(name="farma", description="Spustit party finder pro farmu")
 async def farma_cmd(interaction: discord.Interaction):
+    """Slash command pro spuštění party finderu"""
     embed = discord.Embed(
         title="🌍 Vyber lokaci pro farmu",
         description="Dostupné lokace:",
@@ -301,8 +326,10 @@ async def farma_cmd(interaction: discord.Interaction):
 @bot.command()
 @commands.is_owner()
 async def sync(ctx):
+    """Resync slash commands (pouze pro vlastníka)"""
     await bot.tree.sync()
-    await ctx.send("Slash commands resyncnuté.")
+    await ctx.send("✅ Slash commands resyncnuté.")
 
 
+# Spuštění bota
 bot.run(os.getenv("DISCORD_TOKEN"))
