@@ -36,22 +36,46 @@ ROLE_SLOTS = {
     "🎁 Spoil": 1,
 }
 
+# Klíčové role (5 KRITICKÝCH)
 REQUIRED_ROLES = {
     "💚 Healer": True,
     "🎵 Swordsinger": True,
     "🌟 Buffer": True,
     "💃 Bladedance": True,
-    "⚔️ Damage Dealers": True,  # Min 1!
+    "⚔️ Damage Dealers": True,
+}
+
+# Progressive Role Requirements (Varianta C)
+ROLE_REQUIREMENTS = {
+    5: 1,   # 5 hráčů: min 1 klíčová role
+    6: 2,   # 6 hráčů: min 2 klíčové role
+    7: 3,   # 7 hráčů: min 3 klíčové role
+    8: 4,   # 8 hráčů: min 4 klíčové role
+    9: 5,   # 9 hráčů: všech 5 klíčových rolí
 }
 
 party_data = {
     "lokace": None,
-    "cas_timestamp": None,  # ZMĚNA: Unix timestamp místo textu
+    "cas_timestamp": None,
     "sloty": {role: [] for role in ROLE_SLOTS},
     "msg_id": None,
     "notif_msg_id": None,
     "founder_id": None,
 }
+
+
+def count_filled_required_roles():
+    """Spočítá kolik klíčových rolí je obsazeno"""
+    count = 0
+    for role in REQUIRED_ROLES.keys():
+        if len(party_data["sloty"][role]) > 0:
+            count += 1
+    return count
+
+
+def get_total_members():
+    """Spočítá celkem hráčů v partě"""
+    return sum(len(members) for members in party_data["sloty"].values())
 
 
 class LokaceSelect(Select):
@@ -97,6 +121,31 @@ class RoleSelect(Select):
                 f"❌ Role **{role}** je již obsazená!", ephemeral=True
             )
             return
+
+        # PROGRESSIVE ROLE REQUIREMENT CHECK
+        total = get_total_members()
+        current_required = ROLE_REQUIREMENTS.get(total + 1, 0)  # +1 protože se právě připojuje
+        
+        if total + 1 >= 5 and current_required > 0:
+            filled_required = count_filled_required_roles()
+            is_required_role = role in REQUIRED_ROLES
+            
+            # Pokud se připojuje na NON-klíčovou roli a už je máme dost
+            if not is_required_role and filled_required < current_required:
+                missing_roles = [r for r in REQUIRED_ROLES.keys() if len(party_data["sloty"][r]) == 0]
+                missing_text = ", ".join(missing_roles)
+                await interaction.response.send_message(
+                    f"❌ Nemůžeš se přihlásit!\n\n"
+                    f"Parta potřebuje klíčové role.\n"
+                    f"Obsazeno klíčových: {filled_required}/{current_required}\n"
+                    f"Chybí: {missing_text}",
+                    ephemeral=True
+                )
+                return
+            
+            # Pokud se připojuje na klíčovou roli ale není obsazena - OK
+            # Pokud se připojuje a už máme všechny klíčové role - OK
+            # Pokud se připojuje na klíčovou roli a jí chybí - OK (potřebujeme ji!)
 
         # Odstranění ze všech rolí
         for r, members in party_data["sloty"].items():
@@ -159,7 +208,6 @@ class PartyView(View):
             await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
             return
 
-        # Zobraz výběr lokace (POUZE DANÉMU UŽIVATELI - ephemeral=True)
         embed = discord.Embed(
             title="🌍 Vyber lokaci pro novou farmu",
             description="Kde chceš farmit?",
@@ -175,7 +223,7 @@ class PartyView(View):
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
-    """Vytvoří novou farmu s vybranou lokalitou - smaže až zde stará parta"""
+    """Vytvoří novou farmu s vybranou lokalitou"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -184,7 +232,6 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
         return
 
-    # Teprve až se vybere lokace, tak smaž VŠE staré
     # Vymaž starou party zprávu
     if party_data["msg_id"]:
         try:
@@ -201,7 +248,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání staré notifikace: {e}")
 
-    # Nastav novou farmu - ZMĚNA: Uložíme Unix timestamp
+    # Nastav novou farmu
     party_data["lokace"] = lokace
     party_data["cas_timestamp"] = int(datetime.now().timestamp())
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
@@ -220,20 +267,17 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
 
 
 async def update_party_embed():
-    """Aktualizuje zprávu s party obsazením"""
+    """Aktualizuje zprávu s party obsazením - NOVÁ MODULÁRNÍ STRUKTURA"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
     if not channel or not party_data["lokace"]:
         return
 
-    # Spočítej obsazení
-    total = sum(len(members) for members in party_data["sloty"].values())
+    total = get_total_members()
+    cas_display = f"<t:{party_data['cas_timestamp']}:f>"
 
-    # ZMĚNA: Použijeme Discord timestamp - každý uživatel vidí svůj čas!
-    cas_display = f"<t:{party_data['cas_timestamp']}:f>"  # Příklad: "12. prosince 2025 v 14:04"
-
-    # Vytvořit embed
+    # Vytvořit hlavní embed
     embed = discord.Embed(
         title="🎮 Společná party farma",
         description=(
@@ -245,39 +289,48 @@ async def update_party_embed():
         color=0x0099FF,
     )
 
-    missing_roles = []
-    for role in REQUIRED_ROLES.keys():
-        members = party_data["sloty"][role]
-        
-        if role == "⚔️ Damage Dealers":
-            if len(members) == 0:
-                missing_roles.append(role)
-        else:
-            if len(members) == 0:
-                missing_roles.append(role)
-    
-    if missing_roles:
-        warning_text = "🚨 **CHYBĚJÍCÍ ROLE:**\n"
-        for role in missing_roles:
+    # STAV PARTY SEKCE
+    filled_required = count_filled_required_roles()
+    missing_required = [r for r in REQUIRED_ROLES.keys() if len(party_data["sloty"][r]) == 0]
+
+    if missing_required:
+        warning_text = "🚨 **CHYBĚJÍCÍ KLÍČOVÉ ROLE:**\n"
+        for role in missing_required:
             warning_text += f"❌ {role}\n"
         embed.add_field(name="⚠️ STAV PARTY", value=warning_text, inline=False)
     else:
         embed.add_field(
-            name="✅ PARTY READY", 
-            value="Všechny klíčové role jsou obsazeny! ✨", 
+            name="✅ PARTY READY",
+            value="Všechny klíčové role jsou obsazeny! ✨",
             inline=False
         )
 
-    # Přidej role s hráči
+    # OBSAZENÉ ROLE SEKCE (jen role co MAJÍ hráče)
+    occupied_roles = []
     for role, max_slot in ROLE_SLOTS.items():
         members = party_data["sloty"][role]
-        member_text = ", ".join(m.mention for m in members) if members else "❌ Volné"
-        
-        embed.add_field(
-            name=f"{role} ({len(members)}/{max_slot})",
-            value=member_text,
-            inline=False,
-        )
+        if len(members) > 0:
+            member_text = ", ".join(m.mention for m in members)
+            occupied_roles.append(f"{role} ({len(members)}/{max_slot}) - {member_text}")
+
+    if occupied_roles:
+        occupied_text = "\n".join(occupied_roles)
+        embed.add_field(name="✅ OBSAZENÉ ROLE", value=occupied_text, inline=False)
+    else:
+        embed.add_field(name="✅ OBSAZENÉ ROLE", value="Žádné role zatím obsazeny", inline=False)
+
+    # ZBÝVAJÍCÍ SLOTY SEKCE (jen volné role)
+    remaining_roles = []
+    for role, max_slot in ROLE_SLOTS.items():
+        members = party_data["sloty"][role]
+        if len(members) == 0:
+            remaining_roles.append(f"{role} (0/{max_slot})")
+        elif len(members) < max_slot:
+            remaining_roles.append(f"{role} ({len(members)}/{max_slot})")
+
+    if remaining_roles:
+        remaining_text = "\n".join(remaining_roles)
+        embed.add_field(name="📋 ZBÝVAJÍCÍ SLOTY", value=remaining_text, inline=False)
 
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
@@ -294,9 +347,9 @@ async def update_party_embed():
         msg = await channel.send(embed=embed, view=PartyView())
         party_data["msg_id"] = msg.id
 
-    # Oznámení když je parta plná
+    # FULL PARTY SIGNALIZACE
     if total == 9:
-        if not missing_roles:  # Jen pokud všechny klíčové role jsou obsazeny
+        if not missing_required:  # Všechny klíčové role jsou OK
             participants = " ".join(
                 m.mention for members in party_data["sloty"].values() for m in members
             )
@@ -310,7 +363,7 @@ async def update_party_embed():
             )
             await channel.send(embed=full_embed)
         else:
-            missing_text = ", ".join(missing_roles)
+            missing_text = ", ".join(missing_required)
             warning_embed = discord.Embed(
                 title="⚠️ Party (9/9) ale chybí role!",
                 description=f"Parta je plná, ale chybí: {missing_text}\nNěkdo se musí odhlásit a nahradit jej!",
@@ -328,8 +381,7 @@ async def on_ready():
 
 @bot.tree.command(name="farma", description="Spustit party finder pro farmu")
 async def farma_cmd(interaction: discord.Interaction):
-    """Slash command pro spuštění party finderu - zobrazí výběr lokace"""
-    # Zobraz výběr lokace (POUZE DANÉMU UŽIVATELI - ephemeral=True)
+    """Slash command pro spuštění party finderu"""
     embed = discord.Embed(
         title="🌍 Vyber lokaci pro farmu",
         description="Dostupné lokace:",
