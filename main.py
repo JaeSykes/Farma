@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ui import Select, View, Button
+from discord.ui import Select, View
 import os
 from datetime import datetime
 
