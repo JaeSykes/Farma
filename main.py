@@ -22,15 +22,30 @@ LOKACE = {
     "Forge of Gods": "Forge of Gods",
 }
 
+# Nové role s emoji
 ROLE_SLOTS = {
-    "Damage Dealers": 4,
-    "Swordsinger": 1,
-    "Bladedance": 1,
-    "Healer": 1,
-    "Recharge": 1,
-    "Buffer": 1,
-    "Spoil": 1,
-    "EXP": 1,
+    "⚔️ Damage Dealers": 4,
+    "🛡️ Tank": 1,
+    "🎵 Swordsinger": 1,
+    "💃 Bladedance": 1,
+    "✨ Healer": 1,
+    "🔌 Recharge": 1,
+    "🎭 Buffer": 1,
+    "☠️ Debuffer": 1,
+    "🗡️ Spoil": 1,
+}
+
+# Barvy pro role - kategorizované (Damage=Červená, Support=Modrá, Spoil=Žlutá)
+ROLE_COLORS = {
+    "⚔️ Damage Dealers": 0xE74C3C,  # Pěkný odstín červené
+    "🛡️ Tank": 0xC0392B,  # Tmavší červená
+    "☠️ Debuffer": 0xEC7063,  # Světlejší červená
+    "🎵 Swordsinger": 0x3498DB,  # Pěkný odstín modré
+    "💃 Bladedance": 0x5DADE2,  # Lehčí modrá
+    "✨ Healer": 0x85C1E2,  # Světlá modrá
+    "🔌 Recharge": 0x2E86DE,  # Tmavší modrá
+    "🎭 Buffer": 0x1F618D,  # Velmi tmavá modrá
+    "🗡️ Spoil": 0xF4D03F,  # Pěkný odstín žluté
 }
 
 party_data = {
@@ -226,7 +241,7 @@ async def update_party_embed():
             f"**Lokace:** {party_data['lokace']}\n"
             f"**Zahájena:** {party_data['cas']}\n\n"
             "Rovnoměrná dělba dropu dle CP pravidel\n\n"
-            f"**Obsazení: {total}/9**"
+            f"**Obsazení: {total}/10**"
         ),
         color=0x0099FF,
     )
@@ -234,6 +249,10 @@ async def update_party_embed():
     for role, max_slot in ROLE_SLOTS.items():
         members = party_data["sloty"][role]
         member_text = ", ".join(m.mention for m in members) if members else "❌ Volné"
+        
+        # Barva podle role
+        role_color = ROLE_COLORS.get(role, 0x808080)
+        
         embed.add_field(
             name=f"{role} ({len(members)}/{max_slot})",
             value=member_text,
@@ -253,7 +272,7 @@ async def update_party_embed():
         msg = await channel.send(embed=embed, view=PartyView(is_founder=True))
         party_data["msg_id"] = msg.id
 
-    if total == 9:
+    if total == 10:
         participants = " ".join(
             m.mention for members in party_data["sloty"].values() for m in members
         )
