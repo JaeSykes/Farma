@@ -142,7 +142,10 @@ class PartyView(View):
         await interaction.followup.send(embed=embed, view=view, ephemeral=False)
 
 async def create_new_party(interaction, lokace):
-    channel = bot.get_channel(CHANNEL_ID)
+    channel = bot.get_channel(int(CHANNEL_ID))
+    if not channel:
+        print(f"❌ Kanál {CHANNEL_ID} nenalezen!")
+        return
     
     # Smaž starý embed
     if party_data['msg_id'] and channel:
@@ -179,6 +182,11 @@ async def create_new_party(interaction, lokace):
 
 async def update_party_embed():
     channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        print(f"❌ Kanál {CHANNEL_ID} nenalezen!")
+        return
+    
+    # Zbytek kodu...
     if not channel or not party_data['lokace']:
         return
     
