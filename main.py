@@ -43,7 +43,6 @@ party_data = {
     "msg_id": None,
     "notif_msg_id": None,
     "founder_id": None,
-    "select_msg_id": None,  # ID zprávy s výběrem lokace
 }
 
 
@@ -152,15 +151,7 @@ class PartyView(View):
             await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
             return
 
-        # Vymaž starou zprávu s výběrem lokace (pokud existuje)
-        if party_data["select_msg_id"] and channel:
-            try:
-                msg = await channel.fetch_message(party_data["select_msg_id"])
-                await msg.delete()
-            except Exception as e:
-                print(f"⚠️ Chyba při mazání výběru lokace: {e}")
-
-        # Zobraz výběr lokace
+        # Zobraz výběr lokace (POUZE DANÉMU UŽIVATELI - ephemeral=True)
         embed = discord.Embed(
             title="🌍 Vyber lokaci pro novou farmu",
             description="Kde chceš farmit?",
@@ -172,8 +163,7 @@ class PartyView(View):
         view = View()
         view.add_item(LokaceSelect())
 
-        msg = await interaction.followup.send(embed=embed, view=view, ephemeral=False)
-        party_data["select_msg_id"] = msg.id
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
@@ -203,20 +193,11 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání staré notifikace: {e}")
 
-    # Vymaž zprávu s výběrem lokace
-    if party_data["select_msg_id"]:
-        try:
-            select_msg = await channel.fetch_message(party_data["select_msg_id"])
-            await select_msg.delete()
-        except Exception as e:
-            print(f"⚠️ Chyba při mazání výběru lokace: {e}")
-
     # Nastav novou farmu
     party_data["lokace"] = lokace
     party_data["cas"] = datetime.now().strftime("%d.%m.%Y %H:%M")
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
     party_data["founder_id"] = interaction.user.id
-    party_data["select_msg_id"] = None
 
     # Notifikace o skládání nové party
     notif_embed = discord.Embed(
@@ -305,22 +286,7 @@ async def on_ready():
 @bot.tree.command(name="farma", description="Spustit party finder pro farmu")
 async def farma_cmd(interaction: discord.Interaction):
     """Slash command pro spuštění party finderu - zobrazí výběr lokace"""
-    guild = bot.get_guild(SERVER_ID)
-    channel = guild.get_channel(CHANNEL_ID) if guild else None
-
-    if not channel:
-        await interaction.response.send_message("❌ Kanál nenalezen!", ephemeral=True)
-        return
-
-    # Vymaž starou zprávu s výběrem lokace (pokud existuje)
-    if party_data["select_msg_id"] and channel:
-        try:
-            msg = await channel.fetch_message(party_data["select_msg_id"])
-            await msg.delete()
-        except Exception:
-            pass
-
-    # Zobraz výběr lokace
+    # Zobraz výběr lokace (POUZE DANÉMU UŽIVATELI - ephemeral=True)
     embed = discord.Embed(
         title="🌍 Vyber lokaci pro farmu",
         description="Dostupné lokace:",
@@ -332,8 +298,7 @@ async def farma_cmd(interaction: discord.Interaction):
     view = View()
     view.add_item(LokaceSelect())
 
-    msg = await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
-    party_data["select_msg_id"] = msg.id
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 @bot.command()
