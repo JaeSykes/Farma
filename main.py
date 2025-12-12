@@ -14,38 +14,38 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", "1448991981765394432"))
 SERVER_ID = int(os.getenv("SERVER_ID", "1397286059406000249"))
 
 LOKACE = {
-    "Dragon Valley": "Dragon Valley",
-    "Lair of Antharas": "Lair of Antharas",
-    "Giant Cave": "Giant Cave",
-    "Seed of Annihilation": "Seed of Annihilation",
-    "TOP Cata/Necro": "TOP Cata/Necro",
-    "Forge of Gods": "Forge of Gods",
+    "🐉 Dragon Valley": "Dragon Valley",
+    "🐲 Lair of Antharas": "Lair of Antharas",
+    "🕳️ Giant Cave": "Giant Cave",
+    "🌱 Seed of Annihilation": "Seed of Annihilation",
+    "🏚️ TOP Cata/Necro": "TOP Cata/Necro",
+    "⚒️ Forge of Gods": "Forge of Gods",
 }
 
-# Role s vybranými emoji
+# Nové role s emoji
 ROLE_SLOTS = {
     "⚔️ Damage Dealers": 4,
     "🛡️ Tank": 1,
     "🎵 Swordsinger": 1,
     "💃 Bladedance": 1,
-    "💚 Healer": 1,
-    "🔋 Recharge": 1,
-    "🌟 Buffer": 1,
-    "💀 Debuffer": 1,
-    "🎁 Spoil": 1,
+    "✨ Healer": 1,
+    "🔌 Recharge": 1,
+    "🎭 Buffer": 1,
+    "☠️ Debuffer": 1,
+    "🗡️ Spoil": 1,
 }
 
-# Barvy pro role - kategorizované (Damage=Červená, Support=Modrá, Spoil=Žlutá)
-ROLE_COLORS = {
-    "⚔️ Damage Dealers": 0xE74C3C,  # Pěkný odstín červené
-    "🛡️ Tank": 0xC0392B,  # Tmavší červená
-    "💀 Debuffer": 0xEC7063,  # Světlejší červená
-    "🎵 Swordsinger": 0x3498DB,  # Pěkný odstín modré
-    "💃 Bladedance": 0x5DADE2,  # Lehčí modrá
-    "💚 Healer": 0x85C1E2,  # Světlá modrá
-    "🔋 Recharge": 0x2E86DE,  # Tmavší modrá
-    "🌟 Buffer": 0x1F618D,  # Velmi tmavá modrá
-    "🎁 Spoil": 0xF4D03F,  # Pěkný odstín žluté
+# Barevné indikátory pro role (🔴=Červená, 🔵=Modrá, 🟡=Žlutá)
+ROLE_COLORS_EMOJI = {
+    "⚔️ Damage Dealers": "🔴",
+    "🛡️ Tank": "🔴",
+    "☠️ Debuffer": "🔴",
+    "🎵 Swordsinger": "🔵",
+    "💃 Bladedance": "🔵",
+    "✨ Healer": "🔵",
+    "🔌 Recharge": "🔵",
+    "🎭 Buffer": "🔵",
+    "🗡️ Spoil": "🟡",
 }
 
 party_data = {
@@ -61,8 +61,8 @@ party_data = {
 class LokaceSelect(Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label=lokace, value=lokace)
-            for lokace in LOKACE.values()
+            discord.SelectOption(label=f"{emoji} {lokace}", value=lokace)
+            for emoji, lokace in LOKACE.items()
         ]
         super().__init__(
             placeholder="Vyber lokaci pro farmu...",
@@ -177,8 +177,8 @@ class PartyView(View):
             description="Kde chceš farmit?",
             color=0x0099FF,
         )
-        for lokace in LOKACE.values():
-            embed.add_field(name="•", value=lokace, inline=True)
+        for emoji, lokace in LOKACE.items():
+            embed.add_field(name="•", value=f"{emoji} {lokace}", inline=True)
 
         view = View()
         view.add_item(LokaceSelect())
@@ -248,11 +248,11 @@ async def update_party_embed():
         members = party_data["sloty"][role]
         member_text = ", ".join(m.mention for m in members) if members else "❌ Volné"
         
-        # Barva podle role
-        role_color = ROLE_COLORS.get(role, 0x808080)
+        # Přidej barevný indikátor
+        color_emoji = ROLE_COLORS_EMOJI.get(role, "⚪")
         
         embed.add_field(
-            name=f"{role} ({len(members)}/{max_slot})",
+            name=f"{color_emoji} {role} ({len(members)}/{max_slot})",
             value=member_text,
             inline=False,
         )
@@ -299,8 +299,8 @@ async def farma_cmd(interaction: discord.Interaction):
         description="Dostupné lokace:",
         color=0x0099FF,
     )
-    for lokace in LOKACE.values():
-        embed.add_field(name="•", value=lokace, inline=True)
+    for emoji, lokace in LOKACE.items():
+        embed.add_field(name="•", value=f"{emoji} {lokace}", inline=True)
 
     view = View()
     view.add_item(LokaceSelect())
