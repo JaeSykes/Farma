@@ -22,30 +22,30 @@ LOKACE = {
     "Forge of Gods": "Forge of Gods",
 }
 
-# Nové role s emoji
+# Role s vybranými emoji
 ROLE_SLOTS = {
     "⚔️ Damage Dealers": 4,
     "🛡️ Tank": 1,
     "🎵 Swordsinger": 1,
     "💃 Bladedance": 1,
-    "✨ Healer": 1,
-    "🔌 Recharge": 1,
-    "🎭 Buffer": 1,
-    "☠️ Debuffer": 1,
-    "🗡️ Spoil": 1,
+    "💚 Healer": 1,
+    "🔋 Recharge": 1,
+    "🌟 Buffer": 1,
+    "💀 Debuffer": 1,
+    "🎁 Spoil": 1,
 }
 
 # Barvy pro role - kategorizované (Damage=Červená, Support=Modrá, Spoil=Žlutá)
 ROLE_COLORS = {
     "⚔️ Damage Dealers": 0xE74C3C,  # Pěkný odstín červené
     "🛡️ Tank": 0xC0392B,  # Tmavší červená
-    "☠️ Debuffer": 0xEC7063,  # Světlejší červená
+    "💀 Debuffer": 0xEC7063,  # Světlejší červená
     "🎵 Swordsinger": 0x3498DB,  # Pěkný odstín modré
     "💃 Bladedance": 0x5DADE2,  # Lehčí modrá
-    "✨ Healer": 0x85C1E2,  # Světlá modrá
-    "🔌 Recharge": 0x2E86DE,  # Tmavší modrá
-    "🎭 Buffer": 0x1F618D,  # Velmi tmavá modrá
-    "🗡️ Spoil": 0xF4D03F,  # Pěkný odstín žluté
+    "💚 Healer": 0x85C1E2,  # Světlá modrá
+    "🔋 Recharge": 0x2E86DE,  # Tmavší modrá
+    "🌟 Buffer": 0x1F618D,  # Velmi tmavá modrá
+    "🎁 Spoil": 0xF4D03F,  # Pěkný odstín žluté
 }
 
 party_data = {
@@ -111,11 +111,9 @@ class RoleSelect(Select):
 
 
 class PartyView(View):
-    def __init__(self, is_founder: bool = False):
+    def __init__(self, founder_id: int = None):
         super().__init__(timeout=None)
-        self.is_founder = is_founder
-        
-        # Všichni vidí RoleSelect
+        self.founder_id = founder_id
         self.add_item(RoleSelect())
 
     @discord.ui.button(
@@ -153,8 +151,8 @@ class PartyView(View):
     async def new_party_button(
         self, button: Button, interaction: discord.Interaction
     ):
-        # Zkontroluj oprávnění zakladatele
-        if party_data["founder_id"] is None or interaction.user.id != party_data["founder_id"]:
+        # Zkontroluj jestli klikl zakladatel
+        if self.founder_id is None or interaction.user.id != self.founder_id:
             await interaction.response.send_message(
                 "❌ Jen zakladatel může zahájit novou farmu!", ephemeral=True
             )
@@ -261,15 +259,16 @@ async def update_party_embed():
 
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
+    # Předej founder_id do PartyView
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
-            await msg.edit(embed=embed, view=PartyView(is_founder=True))
+            await msg.edit(embed=embed, view=PartyView(founder_id=party_data["founder_id"]))
         except Exception:
-            msg = await channel.send(embed=embed, view=PartyView(is_founder=True))
+            msg = await channel.send(embed=embed, view=PartyView(founder_id=party_data["founder_id"]))
             party_data["msg_id"] = msg.id
     else:
-        msg = await channel.send(embed=embed, view=PartyView(is_founder=True))
+        msg = await channel.send(embed=embed, view=PartyView(founder_id=party_data["founder_id"]))
         party_data["msg_id"] = msg.id
 
     if total == 10:
