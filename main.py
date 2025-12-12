@@ -275,4 +275,11 @@ async def farma_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view)
 
 
+@bot.command()
+@commands.is_owner()
+async def sync(ctx):
+    await bot.tree.sync()
+    await ctx.send("Slash commands resyncnuté.")
+
+
 bot.run(os.getenv("DISCORD_TOKEN"))
