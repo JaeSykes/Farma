@@ -68,6 +68,7 @@ party_data = {
     "timer_duration": None,
     "is_completed": False,
     "update_task": None,
+    "msg_created": False,  # ✅ NOVÉ - Flag aby se embed vytvořil jen jednou
 }
 
 
@@ -344,6 +345,7 @@ async def reset_to_idle_state():
     party_data["timer_start"] = None
     party_data["timer_duration"] = None
     party_data["update_task"] = None
+    party_data["msg_created"] = False  # ✅ NOVÉ - Reset flag
 
     # Aktualizuj main embed na idle verzi
     if party_data["msg_id"]:
@@ -380,8 +382,9 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání staré party: {e}")
     
-    # ✅ DŮLEŽITÉ - Resetuj msg_id aby se nevytvářel duplicitní embed
+    # ✅ DŮLEŽITÉ - Resetuj msg_id a msg_created aby se vytvořil nový embed
     party_data["msg_id"] = None
+    party_data["msg_created"] = False  # ✅ NOVÉ
 
     # Vymaž starou notifikaci
     if party_data["notif_msg_id"]:
@@ -506,18 +509,18 @@ async def update_party_embed():
 
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
-    # Aktualizuj nebo vytvoř novou zprávu
-    if party_data["msg_id"]:
+    # ✅ NOVÉ - Aktualizuj EXISTUJÍCÍ zprávu, nebo vytvoř novou JEN JEDNOU
+    if party_data["msg_id"] and party_data["msg_created"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
             await msg.edit(embed=embed, view=PartyView())
         except Exception as e:
             print(f"⚠️ Chyba při editaci party: {e}")
-            msg = await channel.send(embed=embed, view=PartyView())
-            party_data["msg_id"] = msg.id
-    else:
+    elif not party_data["msg_created"]:
+        # Vytvoř embed jen jednou
         msg = await channel.send(embed=embed, view=PartyView())
         party_data["msg_id"] = msg.id
+        party_data["msg_created"] = True  # ✅ NOVÉ - Postav flag
 
     # FULL PARTY SIGNALIZACE
     if total == 9 and not party_data["is_completed"]:
