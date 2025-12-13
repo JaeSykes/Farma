@@ -325,7 +325,7 @@ async def start_timer(duration_seconds, is_completion=False):
 
 
 async def reset_to_idle_state():
-    """Resetuje party do idle stavu"""
+    """Resetuje party do idle stavu - NEJJEDNODUŠŠÍ VERZE"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -339,6 +339,17 @@ async def reset_to_idle_state():
     if party_data["update_task"] is not None:
         party_data["update_task"].cancel()
 
+    # NEJDŘÍVE: Smaž notifikaci "Skládá se nová farm parta"
+    if party_data["notif_msg_id"]:
+        try:
+            notif_msg = await channel.fetch_message(party_data["notif_msg_id"])
+            await notif_msg.delete()
+            print("✅ Notifikace smazána")
+        except discord.NotFound:
+            print("⚠️ Notifikace již smazána")
+        except Exception as e:
+            print(f"⚠️ Chyba při mazání notifikace: {e}")
+
     # Smaž všechny completion zprávy
     for msg_id in party_data["completion_msg_ids"]:
         try:
@@ -347,41 +358,40 @@ async def reset_to_idle_state():
         except Exception as e:
             print(f"⚠️ Chyba při mazání completion zprávy: {e}")
 
-    # Resetuj party data - NEJDŘÍVE nastaví is_idle=True!
-    party_data["is_idle"] = True
-    party_data["lokace"] = None
-    party_data["cas_timestamp"] = None
-    party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
-    party_data["founder_id"] = None
-    party_data["completion_msg_ids"] = []
-    party_data["is_completed"] = False
-    party_data["timer_start"] = None
-    party_data["timer_duration"] = None
-    party_data["update_task"] = None
-
-    # ✅ Vytvoř IDLE embed
+    # POTÉ: Edituj party zprávu na IDLE
     idle_embed = discord.Embed(
         title="😴 Nudím se",
         description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
         color=0x808080,
     )
 
-    # ✅ Edituj existující zprávu na idle
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
             await msg.edit(embed=idle_embed, view=IdleView())
-            print("✅ Party do idle stavu (EDIT zprávy)")
+            print("✅ Party zpráva změněna na IDLE embed")
         except discord.NotFound:
             # Zpráva smazaná → vytvoř novou
             msg = await channel.send(embed=idle_embed, view=IdleView())
             party_data["msg_id"] = msg.id
-            print("✅ Party do idle stavu (NEW zpráva)")
-    else:
-        # Žádná zpráva → vytvoř novou
-        msg = await channel.send(embed=idle_embed, view=IdleView())
-        party_data["msg_id"] = msg.id
-        print("✅ Party do idle stavu (NEW zpráva)")
+            print("✅ Party zpráva smazána, vytvořena nová IDLE zpráva")
+        except Exception as e:
+            print(f"❌ Chyba při editaci party zprávy: {e}")
+
+    # NAKONEC: Resetuj party data
+    party_data["is_idle"] = True
+    party_data["lokace"] = None
+    party_data["cas_timestamp"] = None
+    party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
+    party_data["founder_id"] = None
+    party_data["notif_msg_id"] = None
+    party_data["completion_msg_ids"] = []
+    party_data["is_completed"] = False
+    party_data["timer_start"] = None
+    party_data["timer_duration"] = None
+    party_data["update_task"] = None
+
+    print("✅ Party data resetována")
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
@@ -425,7 +435,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         party_data["update_task"].cancel()
         print("⏱️ Update task zrušen")
 
-    # Nastav novou farmu - NEJDŘÍVE is_idle = False!
+    # Nastav novou farmu
     party_data["is_idle"] = False
     party_data["lokace"] = lokace
     party_data["cas_timestamp"] = int(datetime.now().timestamp())
