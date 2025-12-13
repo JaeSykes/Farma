@@ -278,7 +278,7 @@ class IdleView(View):
 
 
 async def start_timer(duration_seconds, is_completion=False):
-    """Spustí timer s live update - OPRAVENO aby neupdatoval hned"""
+    """Spustí timer s live update"""
     
     # Zruš starý update task
     if party_data["update_task"] is not None:
@@ -293,7 +293,7 @@ async def start_timer(duration_seconds, is_completion=False):
     # Spustí live update embedu
     async def live_update():
         try:
-            # ✅ Počkej 10 sekund před prvním updatem (create_new_party už updatel)
+            # ✅ Počkej 10 sekund před prvním updatem
             await asyncio.sleep(10)
             
             while True:
@@ -314,7 +314,7 @@ async def start_timer(duration_seconds, is_completion=False):
 
 
 async def reset_to_idle_state():
-    """Resetuje party do idle stavu"""
+    """Resetuje party do idle stavu - OPRAVENO aby se idle embed VŽDYCKY zobrazil"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -348,21 +348,29 @@ async def reset_to_idle_state():
     party_data["timer_duration"] = None
     party_data["update_task"] = None
 
-    # Aktualizuj main embed na idle verzi
+    # ✅ Vytvoř idle embed
+    idle_embed = discord.Embed(
+        title="😴 Nudí se mi",
+        description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
+        color=0x808080,
+    )
+
+    # ✅ Pokud msg_id existuje → pokus se editovat
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
-            
-            idle_embed = discord.Embed(
-                title="😴 Nudí se mi",
-                description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
-                color=0x808080,
-            )
-            
             await msg.edit(embed=idle_embed, view=IdleView())
-            print("✅ Party resetována do idle stavu")
-        except Exception as e:
-            print(f"⚠️ Chyba při editaci party embedu: {e}")
+            print("✅ Party resetována do idle stavu (EDIT)")
+        except discord.NotFound:
+            # ✅ Zpráva neexistuje → vytvoř novou!
+            msg = await channel.send(embed=idle_embed, view=IdleView())
+            party_data["msg_id"] = msg.id
+            print("✅ Party resetována do idle stavu (NEW zpráva)")
+    else:
+        # ✅ msg_id je None → vytvoř novou
+        msg = await channel.send(embed=idle_embed, view=IdleView())
+        party_data["msg_id"] = msg.id
+        print("✅ Party resetována do idle stavu (NEW zpráva)")
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
@@ -425,10 +433,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     notif_msg = await channel.send(content="@everyone", embed=notif_embed)
     party_data["notif_msg_id"] = notif_msg.id
 
-    # ✅ SPUSTÍ TIMER NEJDŘÍV (ale live_update počká 10 sekund)
     await start_timer(60 * 60, is_completion=False)
-
-    # ✅ TEPRVE PAK updateuj embed (jednou)
     await update_party_embed()
 
 
