@@ -428,13 +428,6 @@ async def create_initial_party_embed():
 async def update_party_embed():
     """Aktualizuje zprávu s party obsazením"""
     async with party_data["update_lock"]:
-        # ✅ CHECK TIMEOUT!
-        remaining = get_remaining_time()
-        if remaining <= 0 and not party_data["is_idle"]:
-            print(f"⏱️ TIMEOUT DETEKOVÁN! Spouštím reset z update...")
-            await reset_to_idle_state()
-            return
-
         guild = bot.get_guild(SERVER_ID)
         channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -542,11 +535,34 @@ async def update_party_embed():
                 completion_msg = await channel.send(embed=warning_embed)
                 party_data["completion_msg_ids"].append(completion_msg.id)
 
+# ✅✅✅ BACKGROUND LOOP - KONTROLA TIMEROU KAŽDÝCH 2 SEKUNDY ✅✅✅
+@tasks.loop(seconds=2)
+async def timer_checker():
+    """Background loop který každé 2 sekundy kontroluje timeout"""
+    try:
+        # Pokud není idle a timer skončil → reset!
+        if not party_data["is_idle"]:
+            remaining = get_remaining_time()
+            if remaining <= 0:
+                print(f"⏱️ [BACKGROUND LOOP] TIMEOUT DETEKOVÁN! Spouštím reset...")
+                await reset_to_idle_state()
+    except Exception as e:
+        print(f"❌ [TIMER_CHECKER] Chyba: {e}")
+
+@timer_checker.before_loop
+async def before_timer_checker():
+    """Čeká na ready než timer_checker spustí"""
+    await bot.wait_until_ready()
+    print("✅ Timer checker background loop spuštěn!")
+
 @bot.event
 async def on_ready():
     """Spuštění bota"""
     print(f"✅ Bot {bot.user} je online!")
     await bot.tree.sync()
+    # ✅ Spusti background loop!
+    if not timer_checker.is_running():
+        timer_checker.start()
 
 @bot.tree.command(name="farma", description="Spustit party finder pro farmu")
 async def farma_cmd(interaction: discord.Interaction):
