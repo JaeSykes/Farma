@@ -68,7 +68,6 @@ party_data = {
     "timer_duration": None,
     "is_completed": False,
     "update_task": None,
-    "msg_created": False,  # ✅ NOVÉ - Flag aby se embed vytvořil jen jednou
 }
 
 
@@ -345,7 +344,6 @@ async def reset_to_idle_state():
     party_data["timer_start"] = None
     party_data["timer_duration"] = None
     party_data["update_task"] = None
-    party_data["msg_created"] = False  # ✅ NOVÉ - Reset flag
 
     # Aktualizuj main embed na idle verzi
     if party_data["msg_id"]:
@@ -382,9 +380,8 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání staré party: {e}")
     
-    # ✅ DŮLEŽITÉ - Resetuj msg_id a msg_created aby se vytvořil nový embed
+    # Resetuj msg_id
     party_data["msg_id"] = None
-    party_data["msg_created"] = False  # ✅ NOVÉ
 
     # Vymaž starou notifikaci
     if party_data["notif_msg_id"]:
@@ -432,7 +429,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
 
 
 async def update_party_embed():
-    """Aktualizuje zprávu s party obsazením"""
+    """Aktualizuje zprávu s party obsazením - ZJEDNODUŠENO"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -509,18 +506,22 @@ async def update_party_embed():
 
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
-    # ✅ NOVÉ - Aktualizuj EXISTUJÍCÍ zprávu, nebo vytvoř novou JEN JEDNOU
-    if party_data["msg_id"] and party_data["msg_created"]:
+    # ✅ ZJEDNODUŠENÉ: Pokud msg_id existuje a zpráva existuje → edituj
+    # Jinak vytvoř novou
+    if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
+            # Zpráva existuje → EDITUJ
             await msg.edit(embed=embed, view=PartyView())
-        except Exception as e:
-            print(f"⚠️ Chyba při editaci party: {e}")
-    elif not party_data["msg_created"]:
-        # Vytvoř embed jen jednou
+            return  # ✅ DŮLEŽITÉ - Ukonči funkci, netvořit nový embed!
+        except discord.NotFound:
+            # Zpráva neexistuje → vytvoř novou
+            party_data["msg_id"] = None
+
+    # Vytvoř nový embed jen pokud msg_id je None
+    if party_data["msg_id"] is None:
         msg = await channel.send(embed=embed, view=PartyView())
         party_data["msg_id"] = msg.id
-        party_data["msg_created"] = True  # ✅ NOVÉ - Postav flag
 
     # FULL PARTY SIGNALIZACE
     if total == 9 and not party_data["is_completed"]:
