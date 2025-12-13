@@ -68,6 +68,7 @@ party_data = {
     "timer_duration": None,
     "is_completed": False,
     "update_task": None,
+    "update_lock": asyncio.Lock(),  # ← LOCK proti duplikitě!
 }
 
 
@@ -443,17 +444,14 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     notif_msg = await channel.send(content="@everyone", embed=notif_embed)
     party_data["notif_msg_id"] = notif_msg.id
 
-    await start_timer(5 * 60, is_completion=False)
-    await update_party_embed()
-
-
-async def update_party_embed():
-    """Aktualizuje zprávu s party obsazením - OCHRANA: Nevolej v idle stavu!"""
-    # ✅ GUARD: Pokud je idle, nic neděláme!
-    if party_data["is_idle"]:
-        print("⏱️ Idle stav, update_party_embed zastaveno")
-        return
+    # NEJDŮLEŽITĚJŠÍ: Vytvoř zprávu a HNED si zapamatuj msg_id!
+    await create_initial_party_embed()
     
+    await start_timer(5 * 60, is_completion=False)
+
+
+async def create_initial_party_embed():
+    """Vytvoří úvodní party embed - JEN PRO INICIALIZACI"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -462,17 +460,9 @@ async def update_party_embed():
 
     total = get_total_members()
     cas_display = f"<t:{party_data['cas_timestamp']}:f>"
-
-    # Timer informace
     remaining_time = get_remaining_time()
     timer_display = format_timer(remaining_time)
-    
-    if party_data["is_completed"]:
-        timer_text = f"⏱️ Parta složena! Timeout za {timer_display}"
-    else:
-        timer_text = f"⏱️ Farma se skládá... Timeout za {timer_display}"
 
-    # Vytvořit hlavní embed
     embed = discord.Embed(
         title="🎮 Společná party farma",
         description=(
@@ -480,12 +470,11 @@ async def update_party_embed():
             f"**Zahájena:** {cas_display}\n\n"
             "Rovnoměrná dělba dropu dle CP pravidel\n\n"
             f"**Obsazení: {total}/12**\n"
-            f"\n{timer_text}"
+            f"\n⏱️ Farma se skládá... Timeout za {timer_display}"
         ),
         color=0x0099FF,
     )
 
-    # STAV PARTY SEKCE
     filled_required = count_filled_required_roles()
     missing_required = [r for r in REQUIRED_ROLES.keys() if len(party_data["sloty"][r]) == 0]
 
@@ -501,81 +490,146 @@ async def update_party_embed():
             inline=False
         )
 
-    # OBSAZENÉ ROLE SEKCE (jen role co MAJÍ hráče)
-    occupied_roles = []
-    for role, max_slot in ROLE_SLOTS.items():
-        members = party_data["sloty"][role]
-        if len(members) > 0:
-            member_text = ", ".join(m.mention for m in members)
-            occupied_roles.append(f"{role} ({len(members)}/{max_slot}) - {member_text}")
+    embed.add_field(name="✅ OBSAZENÉ ROLE", value="Žádné role zatím obsazeny", inline=False)
 
-    if occupied_roles:
-        occupied_text = "\n".join(occupied_roles)
-        embed.add_field(name="✅ OBSAZENÉ ROLE", value=occupied_text, inline=False)
-    else:
-        embed.add_field(name="✅ OBSAZENÉ ROLE", value="Žádné role zatím obsazeny", inline=False)
-
-    # ZBÝVAJÍCÍ SLOTY SEKCE (jen volné role)
-    remaining_roles = []
-    for role, max_slot in ROLE_SLOTS.items():
-        members = party_data["sloty"][role]
-        if len(members) == 0:
-            remaining_roles.append(f"{role} (0/{max_slot})")
-        elif len(members) < max_slot:
-            remaining_roles.append(f"{role} ({len(members)}/{max_slot})")
-
-    if remaining_roles:
-        remaining_text = "\n".join(remaining_roles)
-        embed.add_field(name="📋 ZBÝVAJÍCÍ SLOTY", value=remaining_text, inline=False)
-
+    remaining_roles = [f"{role} (0/{max_slot})" for role, max_slot in ROLE_SLOTS.items()]
+    embed.add_field(name="📋 ZBÝVAJÍCÍ SLOTY", value="\n".join(remaining_roles), inline=False)
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
-    # Pokud msg_id existuje → edituj
-    if party_data["msg_id"]:
-        try:
-            msg = await channel.fetch_message(party_data["msg_id"])
-            await msg.edit(embed=embed, view=PartyView())
-        except discord.NotFound:
-            # Zpráva neexistuje → vytvoř novou
-            msg = await channel.send(embed=embed, view=PartyView())
-            party_data["msg_id"] = msg.id
-    else:
-        # Vytvoř nový embed
-        msg = await channel.send(embed=embed, view=PartyView())
-        party_data["msg_id"] = msg.id
+    # ✅ VYTVOŘ ZPRÁVU A HNED SI ZAPAMATUJ ID!
+    msg = await channel.send(embed=embed, view=PartyView())
+    party_data["msg_id"] = msg.id
+    print(f"✅ Party zpráva vytvořena: msg_id={party_data['msg_id']}")
 
-    # FULL PARTY SIGNALIZACE
-    if total == 12 and not party_data["is_completed"]:
-        if not missing_required:  # Všechny klíčové role jsou OK
-            party_data["is_completed"] = True
-            
-            participants = " ".join(
-                m.mention for members in party_data["sloty"].values() for m in members
-            )
-            full_embed = discord.Embed(
-                title="✅ Parta složena!",
-                description=(
-                    f"Regroup u **Gatekeeper** před portem do **{party_data['lokace']}**\n\n"
-                    f"Účastníci: {participants}"
-                ),
-                color=0x00FF00,
-            )
-            completion_msg = await channel.send(embed=full_embed)
-            party_data["completion_msg_ids"].append(completion_msg.id)
-            
-            # Spustí 15-minutový timer
-            await start_timer(15 * 60, is_completion=True)
+
+async def update_party_embed():
+    """Aktualizuje zprávu s party obsazením - POUZE EDITACE, NE VYTVÁŘENÍ!"""
+    # ✅ LOCK: Zabránění duplikitě!
+    async with party_data["update_lock"]:
+        # ✅ GUARD: Pokud je idle, nic neděláme!
+        if party_data["is_idle"]:
+            print("⏱️ Idle stav, update_party_embed zastaveno")
+            return
+        
+        guild = bot.get_guild(SERVER_ID)
+        channel = guild.get_channel(CHANNEL_ID) if guild else None
+
+        if not channel or not party_data["lokace"]:
+            return
+
+        total = get_total_members()
+        cas_display = f"<t:{party_data['cas_timestamp']}:f>"
+
+        # Timer informace
+        remaining_time = get_remaining_time()
+        timer_display = format_timer(remaining_time)
+        
+        if party_data["is_completed"]:
+            timer_text = f"⏱️ Parta složena! Timeout za {timer_display}"
         else:
-            party_data["is_completed"] = True
-            
-            missing_text = ", ".join(missing_required)
-            warning_embed = discord.Embed(
-                title="⚠️ Party (12/12) ale chybí role!",
-                description=f"Parta je plná, ale chybí: {missing_text}\nNěkdo se musí odhlásit a nahradit jej!",
-                color=0xFF9900,
+            timer_text = f"⏱️ Farma se skládá... Timeout za {timer_display}"
+
+        # Vytvořit hlavní embed
+        embed = discord.Embed(
+            title="🎮 Společná party farma",
+            description=(
+                f"**Lokace:** {party_data['lokace']}\n"
+                f"**Zahájena:** {cas_display}\n\n"
+                "Rovnoměrná dělba dropu dle CP pravidel\n\n"
+                f"**Obsazení: {total}/12**\n"
+                f"\n{timer_text}"
+            ),
+            color=0x0099FF,
+        )
+
+        # STAV PARTY SEKCE
+        filled_required = count_filled_required_roles()
+        missing_required = [r for r in REQUIRED_ROLES.keys() if len(party_data["sloty"][r]) == 0]
+
+        if missing_required:
+            warning_text = "🚨 **CHYBĚJÍCÍ KLÍČOVÉ ROLE:**\n"
+            for role in missing_required:
+                warning_text += f"❌ {role}\n"
+            embed.add_field(name="⚠️ STAV PARTY", value=warning_text, inline=False)
+        else:
+            embed.add_field(
+                name="✅ PARTY READY",
+                value="Všechny klíčové role jsou obsazeny! ✨",
+                inline=False
             )
-            completion_msg = await channel.send(embed=warning_embed)
-            party_data["completion_msg_ids"].append(completion_msg.id)
+
+        # OBSAZENÉ ROLE SEKCE (jen role co MAJÍ hráče)
+        occupied_roles = []
+        for role, max_slot in ROLE_SLOTS.items():
+            members = party_data["sloty"][role]
+            if len(members) > 0:
+                member_text = ", ".join(m.mention for m in members)
+                occupied_roles.append(f"{role} ({len(members)}/{max_slot}) - {member_text}")
+
+        if occupied_roles:
+            occupied_text = "\n".join(occupied_roles)
+            embed.add_field(name="✅ OBSAZENÉ ROLE", value=occupied_text, inline=False)
+        else:
+            embed.add_field(name="✅ OBSAZENÉ ROLE", value="Žádné role zatím obsazeny", inline=False)
+
+        # ZBÝVAJÍCÍ SLOTY SEKCE (jen volné role)
+        remaining_roles = []
+        for role, max_slot in ROLE_SLOTS.items():
+            members = party_data["sloty"][role]
+            if len(members) == 0:
+                remaining_roles.append(f"{role} (0/{max_slot})")
+            elif len(members) < max_slot:
+                remaining_roles.append(f"{role} ({len(members)}/{max_slot})")
+
+        if remaining_roles:
+            remaining_text = "\n".join(remaining_roles)
+            embed.add_field(name="📋 ZBÝVAJÍCÍ SLOTY", value=remaining_text, inline=False)
+
+        embed.set_footer(text="Klikni na 'Nová farma' pro reset")
+
+        # ✅ POUZE EDITUJ, NEVYTVÁREJ!
+        if party_data["msg_id"]:
+            try:
+                msg = await channel.fetch_message(party_data["msg_id"])
+                await msg.edit(embed=embed, view=PartyView())
+            except discord.NotFound:
+                # Zpráva byla smazána mimo naši kontrolu
+                msg = await channel.send(embed=embed, view=PartyView())
+                party_data["msg_id"] = msg.id
+                print(f"⚠️ Party zpráva byla smazána, vytvoření nové: {party_data['msg_id']}")
+
+        # FULL PARTY SIGNALIZACE
+        if total == 12 and not party_data["is_completed"]:
+            if not missing_required:  # Všechny klíčové role jsou OK
+                party_data["is_completed"] = True
+                
+                participants = " ".join(
+                    m.mention for members in party_data["sloty"].values() for m in members
+                )
+                full_embed = discord.Embed(
+                    title="✅ Parta složena!",
+                    description=(
+                        f"Regroup u **Gatekeeper** před portem do **{party_data['lokace']}**\n\n"
+                        f"Účastníci: {participants}"
+                    ),
+                    color=0x00FF00,
+                )
+                completion_msg = await channel.send(embed=full_embed)
+                party_data["completion_msg_ids"].append(completion_msg.id)
+                
+                # Spustí 15-minutový timer
+                await start_timer(15 * 60, is_completion=True)
+            else:
+                party_data["is_completed"] = True
+                
+                missing_text = ", ".join(missing_required)
+                warning_embed = discord.Embed(
+                    title="⚠️ Party (12/12) ale chybí role!",
+                    description=f"Parta je plná, ale chybí: {missing_text}\nNěkdo se musí odhlásit a nahradit jej!",
+                    color=0xFF9900,
+                )
+                completion_msg = await channel.send(embed=warning_embed)
+                party_data["completion_msg_ids"].append(completion_msg.id)
 
 
 @bot.event
