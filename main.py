@@ -10,11 +10,9 @@ intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# IDs z env (Railway Variables)
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "1448991981765394432"))
 SERVER_ID = int(os.getenv("SERVER_ID", "1397286059406000249"))
 
-# Lokace s emoji
 LOKACE = {
     "🐉 Dragon Valley": "Dragon Valley",
     "🐲 Lair of Antharas": "Lair of Antharas",
@@ -24,7 +22,6 @@ LOKACE = {
     "⚒️ Forge of Gods": "Forge of Gods",
 }
 
-# Role s emoji
 ROLE_SLOTS = {
     "⚔️ Damage Dealers": 4,
     "🛡️ Tank": 1,
@@ -37,7 +34,6 @@ ROLE_SLOTS = {
     "🎁 Spoil": 1,
 }
 
-# Klíčové role (5 KRITICKÝCH)
 REQUIRED_ROLES = {
     "💚 Healer": True,
     "🎵 Swordsinger": True,
@@ -46,7 +42,6 @@ REQUIRED_ROLES = {
     "⚔️ Damage Dealers": True,
 }
 
-# Progressive Role Requirements
 ROLE_REQUIREMENTS = {
     5: 1,
     6: 2,
@@ -67,45 +62,32 @@ party_data = {
     "timer_start": None,
     "timer_duration": None,
     "is_completed": False,
-    "timer_task": None,
     "update_lock": asyncio.Lock(),
 }
 
-
 def count_filled_required_roles():
-    """Spočítá kolik klíčových rolí je obsazeno"""
     count = 0
     for role in REQUIRED_ROLES.keys():
         if len(party_data["sloty"][role]) > 0:
             count += 1
     return count
 
-
 def get_total_members():
-    """Spočítá celkem hráčů v partě"""
     return sum(len(members) for members in party_data["sloty"].values())
 
-
 def get_remaining_time():
-    """Vrátí zbývající čas v sekundách"""
     if party_data["timer_start"] is None or party_data["timer_duration"] is None:
         return 0
-    
     elapsed = int(datetime.now().timestamp()) - party_data["timer_start"]
     remaining = party_data["timer_duration"] - elapsed
-    
     return max(0, remaining)
 
-
 def format_timer(seconds):
-    """Formátuje čas na 'X minut Y sekund'"""
     minutes = seconds // 60
     secs = seconds % 60
     return f"{minutes}m {secs}s"
 
-
 class LokaceSelect(Select):
-    """Výběr lokace pro farmu"""
     def __init__(self):
         options = [
             discord.SelectOption(label=lokace, value=lokace)
@@ -123,9 +105,7 @@ class LokaceSelect(Select):
         await interaction.response.defer()
         await create_new_party(interaction, lokace_vyber)
 
-
 class RoleSelect(Select):
-    """Výběr role v partě"""
     def __init__(self):
         options = [
             discord.SelectOption(label=role, value=role) for role in ROLE_SLOTS.keys()
@@ -138,17 +118,23 @@ class RoleSelect(Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        # ✅ CHECK TIMER NEJDŘÍVE!
+        remaining = get_remaining_time()
+        if remaining <= 0 and not party_data["is_idle"]:
+            print(f"⏱️ TIMEOUT DETEKOVÁN! Spouštím reset z RoleSelect...")
+            await reset_to_idle_state()
+            await interaction.response.send_message("❌ Timeout! Farma byla resetována.", ephemeral=True)
+            return
+
         role = self.values[0]
         user = interaction.user
 
-        # Kontrola zda role není plná
         if len(party_data["sloty"][role]) >= ROLE_SLOTS[role]:
             await interaction.response.send_message(
                 f"❌ Role **{role}** je již obsazená!", ephemeral=True
             )
             return
 
-        # PROGRESSIVE ROLE REQUIREMENT CHECK
         total = get_total_members()
         current_required = ROLE_REQUIREMENTS.get(total + 1, 0)
         
@@ -168,21 +154,17 @@ class RoleSelect(Select):
                 )
                 return
 
-        # Odstranění ze všech rolí
         for r, members in party_data["sloty"].items():
             if user in members:
                 members.remove(user)
 
-        # Přidání do vybrané role
         party_data["sloty"][role].append(user)
         await interaction.response.send_message(
             f"✅ Přihlášen na roli **{role}**!", ephemeral=True
         )
         await update_party_embed()
 
-
 class PartyView(View):
-    """View s tlačítky pro party"""
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RoleSelect())
@@ -193,7 +175,14 @@ class PartyView(View):
         custom_id="btn_leave",
     )
     async def leave_button(self, interaction: discord.Interaction, button: Button):
-        """Tlačítko pro odhlášení z party"""
+        # ✅ CHECK TIMER NEJDŘÍVE!
+        remaining = get_remaining_time()
+        if remaining <= 0 and not party_data["is_idle"]:
+            print(f"⏱️ TIMEOUT DETEKOVÁN! Spouštím reset z leave...")
+            await reset_to_idle_state()
+            await interaction.response.send_message("❌ Timeout! Farma byla resetována.", ephemeral=True)
+            return
+
         user = interaction.user
         found = False
 
@@ -219,7 +208,6 @@ class PartyView(View):
         custom_id="btn_new_party",
     )
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
-        """Tlačítko pro vytvoření nové farmy - zobrazí výběr lokace"""
         await interaction.response.defer()
 
         guild = bot.get_guild(SERVER_ID)
@@ -242,9 +230,7 @@ class PartyView(View):
 
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-
 class IdleView(View):
-    """View pro idle stav - jen tlačítko 'Nová farma'"""
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -254,7 +240,6 @@ class IdleView(View):
         custom_id="btn_new_party_idle",
     )
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
-        """Tlačítko pro vytvoření nové farmy z idle stavu"""
         await interaction.response.defer()
 
         guild = bot.get_guild(SERVER_ID)
@@ -277,64 +262,35 @@ class IdleView(View):
 
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-
-async def timer_countdown(duration_seconds, is_completion=False):
-    """JEDNODUCHY TIMER - jen počkej a pak reset"""
-    timer_type = "completion" if is_completion else "creation"
-    print(f"⏱️ Timer spuštěn: {duration_seconds} sekund ({timer_type})")
-    
-    try:
-        # Prostě čekej na konec
-        await asyncio.sleep(duration_seconds)
-        
-        # Když timer skončí → OKAMŽITĚ reset
-        print(f"⏱️ Timer skončil! Spouštím reset...")
-        await reset_to_idle_state()
-        
-    except asyncio.CancelledError:
-        print("⏱️ Timer zrušen")
-
-
 async def reset_to_idle_state():
     """Resetuje party do idle stavu"""
-    print("🔄 [RESET] 1. Hledám guild a channel...")
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
     if not channel:
-        print("❌ [RESET] Kanál nenalezen!")
+        print("❌ Kanál nenalezen!")
         return
 
-    print(f"🔄 [RESET] 2. Kanál nalezen: {channel.name}")
-    print(f"🔄 [RESET] 3. msg_id={party_data['msg_id']}, notif_msg_id={party_data['notif_msg_id']}")
+    print("🔄 RESET: Resetuji party...")
 
-    # ✅ NEJDŘÍVE: Zruš timer task
-    if party_data["timer_task"] is not None:
-        party_data["timer_task"].cancel()
-        party_data["timer_task"] = None
-        print("✅ [RESET] 4. Timer task zrušen")
-
-    # ✅ Smaž notifikaci "Skládá se nová farm parta"
+    # ✅ Smaž notifikaci
     if party_data["notif_msg_id"]:
         try:
             notif_msg = await channel.fetch_message(party_data["notif_msg_id"])
             await notif_msg.delete()
-            print("✅ [RESET] 5. Notifikace smazána")
-        except discord.NotFound:
-            print("⚠️ [RESET] 5. Notifikace již smazána")
+            print("✅ RESET: Notifikace smazána")
         except Exception as e:
-            print(f"⚠️ [RESET] 5. Chyba při mazání notifikace: {e}")
+            print(f"⚠️ RESET: Notifikace chyba: {e}")
 
-    # ✅ Smaž všechny completion zprávy
+    # ✅ Smaž completion zprávy
     for msg_id in party_data["completion_msg_ids"]:
         try:
             msg = await channel.fetch_message(msg_id)
             await msg.delete()
         except Exception as e:
-            print(f"⚠️ [RESET] Chyba při mazání completion zprávy: {e}")
+            print(f"⚠️ RESET: Completion chyba: {e}")
 
     # ✅ Edituj party zprávu na IDLE
-    print(f"🔄 [RESET] 6. Edituji party zprávu (msg_id={party_data['msg_id']})...")
     idle_embed = discord.Embed(
         title="😴 Nudím se",
         description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
@@ -343,24 +299,17 @@ async def reset_to_idle_state():
 
     if party_data["msg_id"]:
         try:
-            print(f"🔄 [RESET] 6a. Fetchuji zprávu ID={party_data['msg_id']}...")
             msg = await channel.fetch_message(party_data["msg_id"])
-            print(f"🔄 [RESET] 6b. Zpráva nalezena! Edituji...")
             await msg.edit(embed=idle_embed, view=IdleView())
-            print("✅ [RESET] 6c. Party zpráva změněna na IDLE embed!")
+            print("✅ RESET: Zpráva změněna na IDLE")
         except discord.NotFound:
-            print("⚠️ [RESET] 6x. Zpráva smazaná → vytváření nové...")
             msg = await channel.send(embed=idle_embed, view=IdleView())
             party_data["msg_id"] = msg.id
-            print(f"✅ [RESET] 6y. Nová IDLE zpráva vytvořena: {party_data['msg_id']}")
+            print("✅ RESET: Nová IDLE zpráva vytvořena")
         except Exception as e:
-            print(f"❌ [RESET] 6z. KRITICKÁ CHYBA při editaci: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print("⚠️ [RESET] 6. msg_id je None! Nemohu editovat!")
+            print(f"❌ RESET: Kritická chyba: {e}")
 
-    # ✅ NAKONEC: Resetuj party data
+    # ✅ Resetuj data
     party_data["is_idle"] = True
     party_data["lokace"] = None
     party_data["cas_timestamp"] = None
@@ -372,55 +321,42 @@ async def reset_to_idle_state():
     party_data["timer_start"] = None
     party_data["timer_duration"] = None
 
-    print("✅ [RESET] 7. Party data resetována - IDLE režim aktivní!")
-
+    print("✅ RESET: Hotovo!")
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
-    """Vytvoří novou farmu s vybranou lokalitou"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
     if not channel:
-        print(f"❌ Kanál nenalezen! ID: {CHANNEL_ID}")
         await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
         return
 
-    # Zruš starý timer
-    if party_data["timer_task"] is not None:
-        party_data["timer_task"].cancel()
-        party_data["timer_task"] = None
-
-    # Vymaž starou party zprávu
+    # Vymaž starou party
     if party_data["msg_id"]:
         try:
             old_msg = await channel.fetch_message(party_data["msg_id"])
             await old_msg.delete()
-        except Exception as e:
-            print(f"⚠️ Chyba při mazání staré party: {e}")
+        except Exception:
+            pass
     
-    party_data["msg_id"] = None
-
-    # Vymaž starou notifikaci
     if party_data["notif_msg_id"]:
         try:
             old_notif = await channel.fetch_message(party_data["notif_msg_id"])
             await old_notif.delete()
-        except Exception as e:
-            print(f"⚠️ Chyba při mazání staré notifikace: {e}")
+        except Exception:
+            pass
 
-    # Vymaž staré completion zprávy
     for msg_id in party_data["completion_msg_ids"]:
         try:
             old_completion = await channel.fetch_message(msg_id)
             await old_completion.delete()
-        except Exception as e:
-            print(f"⚠️ Chyba při mazání completion zprávy: {e}")
+        except Exception:
+            pass
 
-    # ✅ NEJDŘÍVE: Nastav timer_start a timer_duration
+    # ✅ NEJDŘÍVE: Nastav timer
     party_data["timer_start"] = int(datetime.now().timestamp())
     party_data["timer_duration"] = 5 * 60  # 5 minut
 
-    # Nastav novou farmu
     party_data["is_idle"] = False
     party_data["lokace"] = lokace
     party_data["cas_timestamp"] = int(datetime.now().timestamp())
@@ -428,8 +364,9 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     party_data["founder_id"] = interaction.user.id
     party_data["completion_msg_ids"] = []
     party_data["is_completed"] = False
+    party_data["msg_id"] = None
+    party_data["notif_msg_id"] = None
 
-    # Notifikace o skládání nové party
     notif_embed = discord.Embed(
         title="🎉 Skládá se nová farm parta",
         description=f"do lokace **{lokace}**\n\nZakladatel: {interaction.user.mention}",
@@ -438,16 +375,9 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     notif_msg = await channel.send(content="@everyone", embed=notif_embed)
     party_data["notif_msg_id"] = notif_msg.id
 
-    # Vytvoř úvodní party embed
     await create_initial_party_embed()
-    
-    # ✅ POTÉ: Spustí timer
-    party_data["timer_task"] = asyncio.create_task(timer_countdown(5 * 60, is_completion=False))
-    print(f"✅ Timer task vytvořen a spuštěn")
-
 
 async def create_initial_party_embed():
-    """Vytvoří úvodní party embed"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -494,12 +424,17 @@ async def create_initial_party_embed():
 
     msg = await channel.send(embed=embed, view=PartyView())
     party_data["msg_id"] = msg.id
-    print(f"✅ Party zpráva vytvořena: msg_id={party_data['msg_id']}")
-
 
 async def update_party_embed():
     """Aktualizuje zprávu s party obsazením"""
     async with party_data["update_lock"]:
+        # ✅ CHECK TIMEOUT!
+        remaining = get_remaining_time()
+        if remaining <= 0 and not party_data["is_idle"]:
+            print(f"⏱️ TIMEOUT DETEKOVÁN! Spouštím reset z update...")
+            await reset_to_idle_state()
+            return
+
         guild = bot.get_guild(SERVER_ID)
         channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -511,7 +446,6 @@ async def update_party_embed():
         remaining_time = get_remaining_time()
         timer_display = format_timer(remaining_time)
 
-        # Vytvořit hlavní embed
         embed = discord.Embed(
             title="🎮 Společná party farma",
             description=(
@@ -524,7 +458,6 @@ async def update_party_embed():
             color=0x0099FF,
         )
 
-        # STAV PARTY SEKCE
         filled_required = count_filled_required_roles()
         missing_required = [r for r in REQUIRED_ROLES.keys() if len(party_data["sloty"][r]) == 0]
 
@@ -540,7 +473,6 @@ async def update_party_embed():
                 inline=False
             )
 
-        # OBSAZENÉ ROLE SEKCE
         occupied_roles = []
         for role, max_slot in ROLE_SLOTS.items():
             members = party_data["sloty"][role]
@@ -554,7 +486,6 @@ async def update_party_embed():
         else:
             embed.add_field(name="✅ OBSAZENÉ ROLE", value="Žádné role zatím obsazeny", inline=False)
 
-        # ZBÝVAJÍCÍ SLOTY SEKCE
         remaining_roles = []
         for role, max_slot in ROLE_SLOTS.items():
             members = party_data["sloty"][role]
@@ -569,7 +500,6 @@ async def update_party_embed():
 
         embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
-        # ✅ EDITUJ ZPRÁVU
         if party_data["msg_id"]:
             try:
                 msg = await channel.fetch_message(party_data["msg_id"])
@@ -577,7 +507,6 @@ async def update_party_embed():
             except discord.NotFound:
                 msg = await channel.send(embed=embed, view=PartyView())
                 party_data["msg_id"] = msg.id
-                print(f"⚠️ Party zpráva byla smazána, vytvoření nové: {party_data['msg_id']}")
 
         # FULL PARTY SIGNALIZACE
         if total == 9 and not party_data["is_completed"]:
@@ -598,14 +527,9 @@ async def update_party_embed():
                 completion_msg = await channel.send(embed=full_embed)
                 party_data["completion_msg_ids"].append(completion_msg.id)
                 
-                # Zruš starý timer a spustí 15-minutový
-                if party_data["timer_task"] is not None:
-                    party_data["timer_task"].cancel()
-                
-                # ✅ Nastav nový timer
+                # ✅ Nastav nový timer (15 minut)
                 party_data["timer_start"] = int(datetime.now().timestamp())
                 party_data["timer_duration"] = 15 * 60
-                party_data["timer_task"] = asyncio.create_task(timer_countdown(15 * 60, is_completion=True))
             else:
                 party_data["is_completed"] = True
                 
@@ -618,13 +542,11 @@ async def update_party_embed():
                 completion_msg = await channel.send(embed=warning_embed)
                 party_data["completion_msg_ids"].append(completion_msg.id)
 
-
 @bot.event
 async def on_ready():
     """Spuštění bota"""
     print(f"✅ Bot {bot.user} je online!")
     await bot.tree.sync()
-
 
 @bot.tree.command(name="farma", description="Spustit party finder pro farmu")
 async def farma_cmd(interaction: discord.Interaction):
@@ -642,7 +564,6 @@ async def farma_cmd(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-
 @bot.command()
 @commands.is_owner()
 async def sync(ctx):
@@ -650,6 +571,4 @@ async def sync(ctx):
     await bot.tree.sync()
     await ctx.send("✅ Slash commands resyncnuté.")
 
-
-# Spuštění bota
 bot.run(os.getenv("DISCORD_TOKEN"))
