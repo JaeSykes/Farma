@@ -64,11 +64,10 @@ party_data = {
     "founder_id": None,
     "completion_msg_ids": [],
     "is_idle": True,
-    "reset_task": None,
-    "timer_start": None,  # ✅ NOVÉ - Čas zahájení timeru
-    "timer_duration": None,  # ✅ NOVÉ - Délka timeru (3600 pro 60 minut, 900 pro 15 minut)
-    "is_completed": False,  # ✅ NOVÉ - Je parta složena?
-    "update_task": None,  # ✅ NOVÉ - Task pro live update timeru
+    "timer_start": None,
+    "timer_duration": None,
+    "is_completed": False,
+    "update_task": None,
 }
 
 
@@ -87,7 +86,7 @@ def get_total_members():
 
 
 def get_remaining_time():
-    """✅ NOVÉ - Vrátí zbývající čas v sekundách"""
+    """Vrátí zbývající čas v sekundách"""
     if party_data["timer_start"] is None or party_data["timer_duration"] is None:
         return 0
     
@@ -98,7 +97,7 @@ def get_remaining_time():
 
 
 def format_timer(seconds):
-    """✅ NOVÉ - Formátuje čas na 'X minut Y sekund'"""
+    """Formátuje čas na 'X minut Y sekund'"""
     minutes = seconds // 60
     secs = seconds % 60
     return f"{minutes}m {secs}s"
@@ -279,7 +278,7 @@ class IdleView(View):
 
 
 async def start_timer(duration_seconds, is_completion=False):
-    """✅ NOVÉ - Spustí timer s live update"""
+    """Spustí timer s live update"""
     
     # Zruš starý update task
     if party_data["update_task"] is not None:
@@ -299,10 +298,7 @@ async def start_timer(duration_seconds, is_completion=False):
                 
                 if remaining <= 0:
                     # Timer skončil
-                    if is_completion:
-                        await reset_to_idle_state()
-                    else:
-                        await reset_to_idle_state()
+                    await reset_to_idle_state()
                     break
                 
                 # Aktualizuj embed každých 10 sekund
@@ -355,7 +351,7 @@ async def reset_to_idle_state():
             msg = await channel.fetch_message(party_data["msg_id"])
             
             idle_embed = discord.Embed(
-                title="😴 Nudím se",
+                title="😴 Nudí se mi",
                 description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
                 color=0x808080,
             )
@@ -383,6 +379,9 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
             await old_msg.delete()
         except Exception as e:
             print(f"⚠️ Chyba při mazání staré party: {e}")
+    
+    # ✅ DŮLEŽITÉ - Resetuj msg_id aby se nevytvářel duplicitní embed
+    party_data["msg_id"] = None
 
     # Vymaž starou notifikaci
     if party_data["notif_msg_id"]:
@@ -423,7 +422,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     notif_msg = await channel.send(content="@everyone", embed=notif_embed)
     party_data["notif_msg_id"] = notif_msg.id
 
-    # ✅ NOVÉ - Spustí 60-minutový timer
+    # Spustí 60-minutový timer
     await start_timer(60 * 60, is_completion=False)
 
     await update_party_embed()
@@ -440,7 +439,7 @@ async def update_party_embed():
     total = get_total_members()
     cas_display = f"<t:{party_data['cas_timestamp']}:f>"
 
-    # ✅ NOVÉ - Timer informace
+    # Timer informace
     remaining_time = get_remaining_time()
     timer_display = format_timer(remaining_time)
     
@@ -455,9 +454,9 @@ async def update_party_embed():
         description=(
             f"**Lokace:** {party_data['lokace']}\n"
             f"**Zahájena:** {cas_display}\n\n"
-            "Pravidla: Dělba drobu dle pravidel CP, dbej pokynu party leadera, komunikuj na discordu, buď připraven.\n\n"
+            "Rovnoměrná dělba dropu dle CP pravidel\n\n"
             f"**Obsazení: {total}/9**\n"
-            f"\n{timer_text}"  # ✅ NOVÉ - Timer do popisu
+            f"\n{timer_text}"
         ),
         color=0x0099FF,
     )
@@ -539,7 +538,7 @@ async def update_party_embed():
             completion_msg = await channel.send(embed=full_embed)
             party_data["completion_msg_ids"].append(completion_msg.id)
             
-            # ✅ NOVÉ - Spustí 15-minutový timer
+            # Spustí 15-minutový timer
             await start_timer(15 * 60, is_completion=True)
         else:
             party_data["is_completed"] = True
