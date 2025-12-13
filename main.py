@@ -1,8 +1,9 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ui import Select, View, Button
 import os
 from datetime import datetime
+import asyncio
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -61,6 +62,9 @@ party_data = {
     "msg_id": None,
     "notif_msg_id": None,
     "founder_id": None,
+    "completion_msg_ids": [],
+    "is_idle": True,  # ✅ NOVÉ - Flag zda je bot v idle stavu
+    "reset_task": None,  # ✅ NOVÉ - Ukazatel na běžící reset task
 }
 
 
@@ -142,10 +146,6 @@ class RoleSelect(Select):
                     ephemeral=True
                 )
                 return
-            
-            # Pokud se připojuje na klíčovou roli ale není obsazena - OK
-            # Pokud se připojuje a už máme všechny klíčové role - OK
-            # Pokud se připojuje na klíčovou roli a jí chybí - OK (potřebujeme ji!)
 
         # Odstranění ze všech rolí
         for r, members in party_data["sloty"].items():
@@ -222,6 +222,106 @@ class PartyView(View):
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
+class IdleView(View):
+    """View pro idle stav - jen tlačítko 'Nová farma'"""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Nová farma",
+        style=discord.ButtonStyle.blurple,
+        custom_id="btn_new_party_idle",
+    )
+    async def new_party_button(self, interaction: discord.Interaction, button: Button):
+        """Tlačítko pro vytvoření nové farmy z idle stavu"""
+        await interaction.response.defer()
+
+        guild = bot.get_guild(SERVER_ID)
+        channel = guild.get_channel(CHANNEL_ID) if guild else None
+
+        if not channel:
+            await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="🌍 Vyber lokaci pro novou farmu",
+            description="Kde chceš farmit?",
+            color=0x0099FF,
+        )
+        for emoji_lokace in LOKACE.keys():
+            embed.add_field(name="•", value=emoji_lokace, inline=True)
+
+        view = View()
+        view.add_item(LokaceSelect())
+
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+
+async def schedule_party_reset():
+    """✅ NOVÉ - Naplánuje reset party po 60 minutách"""
+    
+    # Zruš starý task pokud existuje
+    if party_data["reset_task"] is not None:
+        party_data["reset_task"].cancel()
+        print("⏳ Starý reset task zrušen")
+    
+    # Vytvoř nový task
+    async def reset_after_delay():
+        try:
+            print("⏳ Reset party za 60 minut...")
+            await asyncio.sleep(60 * 60)  # 60 minut
+            await reset_to_idle_state()
+        except asyncio.CancelledError:
+            print("⏳ Reset task byl zrušen")
+    
+    party_data["reset_task"] = asyncio.create_task(reset_after_delay())
+
+
+async def reset_to_idle_state():
+    """✅ NOVÉ - Resetuje party do idle stavu"""
+    guild = bot.get_guild(SERVER_ID)
+    channel = guild.get_channel(CHANNEL_ID) if guild else None
+
+    if not channel:
+        print("❌ Kanál nenalezen!")
+        return
+
+    print("🔄 Resetuji party do idle stavu...")
+
+    # Smaž všechny completion zprávy
+    for msg_id in party_data["completion_msg_ids"]:
+        try:
+            msg = await channel.fetch_message(msg_id)
+            await msg.delete()
+        except Exception as e:
+            print(f"⚠️ Chyba při mazání completion zprávy: {e}")
+
+    # Resetuj party data
+    party_data["lokace"] = None
+    party_data["cas_timestamp"] = None
+    party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
+    party_data["founder_id"] = None
+    party_data["completion_msg_ids"] = []
+    party_data["is_idle"] = True
+    party_data["reset_task"] = None
+
+    # Aktualizuj main embed na idle verzi
+    if party_data["msg_id"]:
+        try:
+            msg = await channel.fetch_message(party_data["msg_id"])
+            
+            idle_embed = discord.Embed(
+                title="😴 Nudím se mi",
+                description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
+                color=0x808080,
+            )
+            
+            await msg.edit(embed=idle_embed, view=IdleView())
+            print("✅ Party resetována do idle stavu")
+        except Exception as e:
+            print(f"⚠️ Chyba při editaci party embedu: {e}")
+
+
 async def create_new_party(interaction: discord.Interaction, lokace: str):
     """Vytvoří novou farmu s vybranou lokalitou"""
     guild = bot.get_guild(SERVER_ID)
@@ -248,11 +348,26 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání staré notifikace: {e}")
 
+    # Vymaž staré completion zprávy
+    for msg_id in party_data["completion_msg_ids"]:
+        try:
+            old_completion = await channel.fetch_message(msg_id)
+            await old_completion.delete()
+        except Exception as e:
+            print(f"⚠️ Chyba při mazání completion zprávy: {e}")
+
+    # ✅ NOVÉ - Zruš starý reset task
+    if party_data["reset_task"] is not None:
+        party_data["reset_task"].cancel()
+        print("⏳ Reset task zrušen")
+
     # Nastav novou farmu
     party_data["lokace"] = lokace
     party_data["cas_timestamp"] = int(datetime.now().timestamp())
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
     party_data["founder_id"] = interaction.user.id
+    party_data["completion_msg_ids"] = []
+    party_data["is_idle"] = False  # ✅ NOVÉ
 
     # Notifikace o skládání nové party
     notif_embed = discord.Embed(
@@ -283,7 +398,7 @@ async def update_party_embed():
         description=(
             f"**Lokace:** {party_data['lokace']}\n"
             f"**Zahájena:** {cas_display}\n\n"
-            "Rovnoměrná dělba dropu dle CP pravidel\n\n"
+            "Pravidla: Dělba dropu dle CP pravidel, dbej pokynu party leadera, komunikuj na discordu, buď připraven.\n\n"
             f"**Obsazení: {total}/9**"
         ),
         color=0x0099FF,
@@ -361,7 +476,11 @@ async def update_party_embed():
                 ),
                 color=0x00FF00,
             )
-            await channel.send(embed=full_embed)
+            completion_msg = await channel.send(embed=full_embed)
+            party_data["completion_msg_ids"].append(completion_msg.id)
+            
+            # ✅ NOVÉ - Naplánuj reset za 60 minut
+            await schedule_party_reset()
         else:
             missing_text = ", ".join(missing_required)
             warning_embed = discord.Embed(
@@ -369,7 +488,8 @@ async def update_party_embed():
                 description=f"Parta je plná, ale chybí: {missing_text}\nNěkdo se musí odhlásit a nahradit jej!",
                 color=0xFF9900,
             )
-            await channel.send(embed=warning_embed)
+            completion_msg = await channel.send(embed=warning_embed)
+            party_data["completion_msg_ids"].append(completion_msg.id)
 
 
 @bot.event
