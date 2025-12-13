@@ -52,7 +52,7 @@ ROLE_REQUIREMENTS = {
     6: 2,   # 6 hráčů: min 2 klíčové role
     7: 3,   # 7 hráčů: min 3 klíčové role
     8: 4,   # 8 hráčů: min 4 klíčové role
-    9: 5,   # 9 hráčů: všech 5 klíčových rolí
+    12: 5,  # 12 hráčů: všech 5 klíčových rolí
 }
 
 party_data = {
@@ -278,7 +278,7 @@ class IdleView(View):
 
 
 async def start_timer(duration_seconds, is_completion=False):
-    """Spustí timer s live update"""
+    """Spustí timer s live update - OPRAVENO: Check každou sekundu"""
     
     # Zruš starý update task
     if party_data["update_task"] is not None:
@@ -293,8 +293,7 @@ async def start_timer(duration_seconds, is_completion=False):
     # Spustí live update embedu
     async def live_update():
         try:
-            # ✅ Počkej 10 sekund před prvním updatem
-            await asyncio.sleep(10)
+            last_update = 0  # ← Trackuj poslední update
             
             while True:
                 # ✅ GUARD: Pokud je idle, zastav live update!
@@ -305,13 +304,19 @@ async def start_timer(duration_seconds, is_completion=False):
                 remaining = get_remaining_time()
                 
                 if remaining <= 0:
-                    # Timer skončil
+                    # Timer skončil - OKAMŽITĚ zavolej reset!
+                    print(f"⏱️ Timer skončil! Zbývá {remaining}s")
                     await reset_to_idle_state()
                     break
                 
-                # Aktualizuj embed každých 10 sekund
-                await update_party_embed()
-                await asyncio.sleep(10)
+                # ✅ Updatuj embed jen každých 10 sekund, ne každou sekundu
+                current_time = int(datetime.now().timestamp())
+                if current_time - last_update >= 10:
+                    await update_party_embed()
+                    last_update = current_time
+                
+                # ✅ CHECK KAŽDOU SEKUNDU! (místo 10)
+                await asyncio.sleep(1)
         except asyncio.CancelledError:
             print("⏱️ Live update task zrušen")
     
@@ -438,7 +443,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     notif_msg = await channel.send(content="@everyone", embed=notif_embed)
     party_data["notif_msg_id"] = notif_msg.id
 
-    await start_timer(60 * 60, is_completion=False)
+    await start_timer(5 * 60, is_completion=False)
     await update_party_embed()
 
 
@@ -474,7 +479,7 @@ async def update_party_embed():
             f"**Lokace:** {party_data['lokace']}\n"
             f"**Zahájena:** {cas_display}\n\n"
             "Rovnoměrná dělba dropu dle CP pravidel\n\n"
-            f"**Obsazení: {total}/9**\n"
+            f"**Obsazení: {total}/12**\n"
             f"\n{timer_text}"
         ),
         color=0x0099FF,
@@ -540,7 +545,7 @@ async def update_party_embed():
         party_data["msg_id"] = msg.id
 
     # FULL PARTY SIGNALIZACE
-    if total == 9 and not party_data["is_completed"]:
+    if total == 12 and not party_data["is_completed"]:
         if not missing_required:  # Všechny klíčové role jsou OK
             party_data["is_completed"] = True
             
@@ -565,7 +570,7 @@ async def update_party_embed():
             
             missing_text = ", ".join(missing_required)
             warning_embed = discord.Embed(
-                title="⚠️ Party (9/9) ale chybí role!",
+                title="⚠️ Party (12/12) ale chybí role!",
                 description=f"Parta je plná, ale chybí: {missing_text}\nNěkdo se musí odhlásit a nahradit jej!",
                 color=0xFF9900,
             )
