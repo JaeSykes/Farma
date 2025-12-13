@@ -355,7 +355,7 @@ async def reset_to_idle_state():
             msg = await channel.fetch_message(party_data["msg_id"])
             
             idle_embed = discord.Embed(
-                title="😴 Nudí se mi",
+                title="😴 Nudím se",
                 description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
                 color=0x808080,
             )
@@ -455,7 +455,7 @@ async def update_party_embed():
         description=(
             f"**Lokace:** {party_data['lokace']}\n"
             f"**Zahájena:** {cas_display}\n\n"
-            "Rovnoměrná dělba dropu dle CP pravidel\n\n"
+            "Pravidla: Dělba drobu dle pravidel CP, dbej pokynu party leadera, komunikuj na discordu, buď připraven.\n\n"
             f"**Obsazení: {total}/9**\n"
             f"\n{timer_text}"  # ✅ NOVÉ - Timer do popisu
         ),
