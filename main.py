@@ -279,10 +279,7 @@ class IdleView(View):
 
 
 async def timer_countdown(duration_seconds, is_completion=False):
-    """JEDNODUCHY TIMER - jen počkej a pak reset. Žádný live update!"""
-    party_data["timer_start"] = int(datetime.now().timestamp())
-    party_data["timer_duration"] = duration_seconds
-    
+    """JEDNODUCHY TIMER - jen počkej a pak reset"""
     timer_type = "completion" if is_completion else "creation"
     print(f"⏱️ Timer spuštěn: {duration_seconds} sekund ({timer_type})")
     
@@ -291,7 +288,7 @@ async def timer_countdown(duration_seconds, is_completion=False):
         await asyncio.sleep(duration_seconds)
         
         # Když timer skončí → OKAMŽITĚ reset
-        print(f"⏱️ Timer skončil!")
+        print(f"⏱️ Timer skončil! Spouštím reset...")
         await reset_to_idle_state()
         
     except asyncio.CancelledError:
@@ -410,6 +407,10 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání completion zprávy: {e}")
 
+    # ✅ NEJDŘÍVE: Nastav timer_start a timer_duration
+    party_data["timer_start"] = int(datetime.now().timestamp())
+    party_data["timer_duration"] = 5 * 60  # 5 minut
+
     # Nastav novou farmu
     party_data["is_idle"] = False
     party_data["lokace"] = lokace
@@ -431,8 +432,9 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     # Vytvoř úvodní party embed
     await create_initial_party_embed()
     
-    # Spustí timer
+    # ✅ POTÉ: Spustí timer
     party_data["timer_task"] = asyncio.create_task(timer_countdown(5 * 60, is_completion=False))
+    print(f"✅ Timer task vytvořen a spuštěn")
 
 
 async def create_initial_party_embed():
@@ -487,7 +489,7 @@ async def create_initial_party_embed():
 
 
 async def update_party_embed():
-    """Aktualizuje zprávu s party obsazením - bez live update timeru!"""
+    """Aktualizuje zprávu s party obsazením"""
     async with party_data["update_lock"]:
         guild = bot.get_guild(SERVER_ID)
         channel = guild.get_channel(CHANNEL_ID) if guild else None
@@ -590,6 +592,10 @@ async def update_party_embed():
                 # Zruš starý timer a spustí 15-minutový
                 if party_data["timer_task"] is not None:
                     party_data["timer_task"].cancel()
+                
+                # ✅ Nastav nový timer
+                party_data["timer_start"] = int(datetime.now().timestamp())
+                party_data["timer_duration"] = 15 * 60
                 party_data["timer_task"] = asyncio.create_task(timer_countdown(15 * 60, is_completion=True))
             else:
                 party_data["is_completed"] = True
