@@ -165,6 +165,45 @@ class RoleSelect(Select):
         )
         await update_party_embed()
 
+class ConfirmNewFarmView(View):
+    """View pro potvrzení nové farmy"""
+    def __init__(self, interaction: discord.Interaction):
+        super().__init__(timeout=30)
+        self.interaction = interaction
+        self.confirmed = False
+
+    @discord.ui.button(label="✅ Ano, začít farmu!", style=discord.ButtonStyle.green, custom_id="confirm_yes")
+    async def confirm_yes(self, interaction: discord.Interaction, button: Button):
+        if interaction.user != self.interaction.user:
+            await interaction.response.send_message("❌ Nemáš právo potvrdit tuto akci!", ephemeral=True)
+            return
+        
+        self.confirmed = True
+        await interaction.response.defer()
+        # Zobraz lokace pro výběr
+        embed = discord.Embed(
+            title="🌍 Vyber lokaci pro novou farmu",
+            description="Kde chceš farmit?",
+            color=0x0099FF,
+        )
+        for emoji_lokace in LOKACE.keys():
+            embed.add_field(name="•", value=emoji_lokace, inline=True)
+
+        view = View()
+        view.add_item(LokaceSelect())
+        
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        self.stop()
+
+    @discord.ui.button(label="❌ Ne, zrušit", style=discord.ButtonStyle.red, custom_id="confirm_no")
+    async def confirm_no(self, interaction: discord.Interaction, button: Button):
+        if interaction.user != self.interaction.user:
+            await interaction.response.send_message("❌ Nemáš právo zrušit tuto akci!", ephemeral=True)
+            return
+        
+        await interaction.response.send_message("❌ Zahájení nové farmy zrušeno.", ephemeral=True)
+        self.stop()
+
 class PartyView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -209,27 +248,15 @@ class PartyView(View):
         custom_id="btn_new_party",
     )
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.defer()
-
-        guild = bot.get_guild(SERVER_ID)
-        channel = guild.get_channel(CHANNEL_ID) if guild else None
-
-        if not channel:
-            await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
-            return
-
+        # ✅ CONFIRMATION DIALOG
         embed = discord.Embed(
-            title="🌍 Vyber lokaci pro novou farmu",
-            description="Kde chceš farmit?",
-            color=0x0099FF,
+            title="⚠️ Jste si jistý?",
+            description="Chcete opravdu zahájit **novou farmu**?\n\nStará farma bude resetována.",
+            color=0xFFAA00,
         )
-        for emoji_lokace in LOKACE.keys():
-            embed.add_field(name="•", value=emoji_lokace, inline=True)
-
-        view = View()
-        view.add_item(LokaceSelect())
-
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        
+        confirm_view = ConfirmNewFarmView(interaction)
+        await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
 
 class IdleView(View):
     def __init__(self):
@@ -241,27 +268,15 @@ class IdleView(View):
         custom_id="btn_new_party_idle",
     )
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.defer()
-
-        guild = bot.get_guild(SERVER_ID)
-        channel = guild.get_channel(CHANNEL_ID) if guild else None
-
-        if not channel:
-            await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
-            return
-
+        # ✅ CONFIRMATION DIALOG
         embed = discord.Embed(
-            title="🌍 Vyber lokaci pro novou farmu",
-            description="Kde chceš farmit?",
-            color=0x0099FF,
+            title="⚠️ Jste si jistý?",
+            description="Chcete opravdu zahájit **novou farmu**?",
+            color=0xFFAA00,
         )
-        for emoji_lokace in LOKACE.keys():
-            embed.add_field(name="•", value=emoji_lokace, inline=True)
-
-        view = View()
-        view.add_item(LokaceSelect())
-
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        
+        confirm_view = ConfirmNewFarmView(interaction)
+        await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
 
 async def reset_to_idle_state():
     """Resetuje party do idle stavu"""
