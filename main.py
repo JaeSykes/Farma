@@ -357,7 +357,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
 
     # ✅ NEJDŘÍVE: Nastav timer
     party_data["timer_start"] = int(datetime.now().timestamp())
-    party_data["timer_duration"] = 5 * 60  # 5 minut
+    party_data["timer_duration"] = 45 * 60  # ✅ 45 MINUT
     party_data["last_embed_update"] = 0
 
     party_data["is_idle"] = False
