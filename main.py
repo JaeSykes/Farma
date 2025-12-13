@@ -67,7 +67,7 @@ party_data = {
     "timer_start": None,
     "timer_duration": None,
     "is_completed": False,
-    "update_task": None,
+    "timer_task": None,
     "update_lock": asyncio.Lock(),
 }
 
@@ -278,54 +278,28 @@ class IdleView(View):
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
-async def start_timer(duration_seconds, is_completion=False):
-    """Spustí timer s live update"""
-    
-    # Zruš starý update task
-    if party_data["update_task"] is not None:
-        party_data["update_task"].cancel()
-    
+async def timer_countdown(duration_seconds, is_completion=False):
+    """JEDNODUCHY TIMER - jen počkej a pak reset. Žádný live update!"""
     party_data["timer_start"] = int(datetime.now().timestamp())
     party_data["timer_duration"] = duration_seconds
     
     timer_type = "completion" if is_completion else "creation"
     print(f"⏱️ Timer spuštěn: {duration_seconds} sekund ({timer_type})")
     
-    # Spustí live update embedu
-    async def live_update():
-        try:
-            last_update = 0
-            
-            while True:
-                # ✅ GUARD: Pokud je idle, zastav live update!
-                if party_data["is_idle"]:
-                    print("⏱️ Idle stav dosažen, live update zastaveno")
-                    break
-                
-                remaining = get_remaining_time()
-                
-                if remaining <= 0:
-                    # Timer skončil - OKAMŽITĚ zavolej reset!
-                    print(f"⏱️ Timer skončil! Zbývá {remaining}s")
-                    await reset_to_idle_state()
-                    break
-                
-                # ✅ Updatuj embed jen každých 10 sekund
-                current_time = int(datetime.now().timestamp())
-                if current_time - last_update >= 10:
-                    await update_party_embed()
-                    last_update = current_time
-                
-                # ✅ CHECK KAŽDOU SEKUNDU
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            print("⏱️ Live update task zrušen")
-    
-    party_data["update_task"] = asyncio.create_task(live_update())
+    try:
+        # Prostě čekej na konec
+        await asyncio.sleep(duration_seconds)
+        
+        # Když timer skončí → OKAMŽITĚ reset
+        print(f"⏱️ Timer skončil!")
+        await reset_to_idle_state()
+        
+    except asyncio.CancelledError:
+        print("⏱️ Timer zrušen")
 
 
 async def reset_to_idle_state():
-    """Resetuje party do idle stavu - NEJJEDNODUŠŠÍ VERZE"""
+    """Resetuje party do idle stavu"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -335,11 +309,13 @@ async def reset_to_idle_state():
 
     print("🔄 Resetuji party do idle stavu...")
 
-    # Zruš update task
-    if party_data["update_task"] is not None:
-        party_data["update_task"].cancel()
+    # ✅ NEJDŘÍVE: Zruš timer task
+    if party_data["timer_task"] is not None:
+        party_data["timer_task"].cancel()
+        party_data["timer_task"] = None
+        print("✅ Timer task zrušen")
 
-    # NEJDŘÍVE: Smaž notifikaci "Skládá se nová farm parta"
+    # ✅ Smaž notifikaci "Skládá se nová farm parta"
     if party_data["notif_msg_id"]:
         try:
             notif_msg = await channel.fetch_message(party_data["notif_msg_id"])
@@ -350,7 +326,7 @@ async def reset_to_idle_state():
         except Exception as e:
             print(f"⚠️ Chyba při mazání notifikace: {e}")
 
-    # Smaž všechny completion zprávy
+    # ✅ Smaž všechny completion zprávy
     for msg_id in party_data["completion_msg_ids"]:
         try:
             msg = await channel.fetch_message(msg_id)
@@ -358,7 +334,7 @@ async def reset_to_idle_state():
         except Exception as e:
             print(f"⚠️ Chyba při mazání completion zprávy: {e}")
 
-    # POTÉ: Edituj party zprávu na IDLE
+    # ✅ Edituj party zprávu na IDLE
     idle_embed = discord.Embed(
         title="😴 Nudím se",
         description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
@@ -378,7 +354,7 @@ async def reset_to_idle_state():
         except Exception as e:
             print(f"❌ Chyba při editaci party zprávy: {e}")
 
-    # NAKONEC: Resetuj party data
+    # ✅ NAKONEC: Resetuj party data
     party_data["is_idle"] = True
     party_data["lokace"] = None
     party_data["cas_timestamp"] = None
@@ -389,9 +365,8 @@ async def reset_to_idle_state():
     party_data["is_completed"] = False
     party_data["timer_start"] = None
     party_data["timer_duration"] = None
-    party_data["update_task"] = None
 
-    print("✅ Party data resetována")
+    print("✅ Party resetována - IDLE režim aktivní!")
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
@@ -403,6 +378,11 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         print(f"❌ Kanál nenalezen! ID: {CHANNEL_ID}")
         await interaction.followup.send("❌ Kanál nenalezen!", ephemeral=True)
         return
+
+    # Zruš starý timer
+    if party_data["timer_task"] is not None:
+        party_data["timer_task"].cancel()
+        party_data["timer_task"] = None
 
     # Vymaž starou party zprávu
     if party_data["msg_id"]:
@@ -430,11 +410,6 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
         except Exception as e:
             print(f"⚠️ Chyba při mazání completion zprávy: {e}")
 
-    # Zruš starý update task
-    if party_data["update_task"] is not None:
-        party_data["update_task"].cancel()
-        print("⏱️ Update task zrušen")
-
     # Nastav novou farmu
     party_data["is_idle"] = False
     party_data["lokace"] = lokace
@@ -456,7 +431,8 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     # Vytvoř úvodní party embed
     await create_initial_party_embed()
     
-    await start_timer(5 * 60, is_completion=False)
+    # Spustí timer
+    party_data["timer_task"] = asyncio.create_task(timer_countdown(5 * 60, is_completion=False))
 
 
 async def create_initial_party_embed():
@@ -511,13 +487,7 @@ async def create_initial_party_embed():
 
 
 async def update_party_embed():
-    """Aktualizuje zprávu s party obsazením"""
-    # ✅ GUARD: Pokud je idle HNED VRAŤ, nic neupravuj!
-    if party_data["is_idle"]:
-        print("⏱️ Idle stav, update_party_embed zastaveno")
-        return
-    
-    # ✅ LOCK: Zabránění duplikitě!
+    """Aktualizuje zprávu s party obsazením - bez live update timeru!"""
     async with party_data["update_lock"]:
         guild = bot.get_guild(SERVER_ID)
         channel = guild.get_channel(CHANNEL_ID) if guild else None
@@ -527,15 +497,8 @@ async def update_party_embed():
 
         total = get_total_members()
         cas_display = f"<t:{party_data['cas_timestamp']}:f>"
-
-        # Timer informace
         remaining_time = get_remaining_time()
         timer_display = format_timer(remaining_time)
-        
-        if party_data["is_completed"]:
-            timer_text = f"⏱️ Parta složena! Timeout za {timer_display}"
-        else:
-            timer_text = f"⏱️ Farma se skládá... Timeout za {timer_display}"
 
         # Vytvořit hlavní embed
         embed = discord.Embed(
@@ -545,7 +508,7 @@ async def update_party_embed():
                 f"**Zahájena:** {cas_display}\n\n"
                 "Rovnoměrná dělba dropu dle CP pravidel\n\n"
                 f"**Obsazení: {total}/9**\n"
-                f"\n{timer_text}"
+                f"\n⏱️ Farma se skládá... Timeout za {timer_display}"
             ),
             color=0x0099FF,
         )
@@ -595,7 +558,7 @@ async def update_party_embed():
 
         embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
-        # ✅ POUZE EDITUJ!
+        # ✅ EDITUJ ZPRÁVU
         if party_data["msg_id"]:
             try:
                 msg = await channel.fetch_message(party_data["msg_id"])
@@ -624,8 +587,10 @@ async def update_party_embed():
                 completion_msg = await channel.send(embed=full_embed)
                 party_data["completion_msg_ids"].append(completion_msg.id)
                 
-                # Spustí 15-minutový timer
-                await start_timer(15 * 60, is_completion=True)
+                # Zruš starý timer a spustí 15-minutový
+                if party_data["timer_task"] is not None:
+                    party_data["timer_task"].cancel()
+                party_data["timer_task"] = asyncio.create_task(timer_countdown(15 * 60, is_completion=True))
             else:
                 party_data["is_completed"] = True
                 
