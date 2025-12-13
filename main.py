@@ -297,31 +297,33 @@ async def timer_countdown(duration_seconds, is_completion=False):
 
 async def reset_to_idle_state():
     """Resetuje party do idle stavu"""
+    print("🔄 [RESET] 1. Hledám guild a channel...")
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
     if not channel:
-        print("❌ Kanál nenalezen!")
+        print("❌ [RESET] Kanál nenalezen!")
         return
 
-    print("🔄 Resetuji party do idle stavu...")
+    print(f"🔄 [RESET] 2. Kanál nalezen: {channel.name}")
+    print(f"🔄 [RESET] 3. msg_id={party_data['msg_id']}, notif_msg_id={party_data['notif_msg_id']}")
 
     # ✅ NEJDŘÍVE: Zruš timer task
     if party_data["timer_task"] is not None:
         party_data["timer_task"].cancel()
         party_data["timer_task"] = None
-        print("✅ Timer task zrušen")
+        print("✅ [RESET] 4. Timer task zrušen")
 
     # ✅ Smaž notifikaci "Skládá se nová farm parta"
     if party_data["notif_msg_id"]:
         try:
             notif_msg = await channel.fetch_message(party_data["notif_msg_id"])
             await notif_msg.delete()
-            print("✅ Notifikace smazána")
+            print("✅ [RESET] 5. Notifikace smazána")
         except discord.NotFound:
-            print("⚠️ Notifikace již smazána")
+            print("⚠️ [RESET] 5. Notifikace již smazána")
         except Exception as e:
-            print(f"⚠️ Chyba při mazání notifikace: {e}")
+            print(f"⚠️ [RESET] 5. Chyba při mazání notifikace: {e}")
 
     # ✅ Smaž všechny completion zprávy
     for msg_id in party_data["completion_msg_ids"]:
@@ -329,9 +331,10 @@ async def reset_to_idle_state():
             msg = await channel.fetch_message(msg_id)
             await msg.delete()
         except Exception as e:
-            print(f"⚠️ Chyba při mazání completion zprávy: {e}")
+            print(f"⚠️ [RESET] Chyba při mazání completion zprávy: {e}")
 
     # ✅ Edituj party zprávu na IDLE
+    print(f"🔄 [RESET] 6. Edituji party zprávu (msg_id={party_data['msg_id']})...")
     idle_embed = discord.Embed(
         title="😴 Nudím se",
         description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
@@ -340,16 +343,22 @@ async def reset_to_idle_state():
 
     if party_data["msg_id"]:
         try:
+            print(f"🔄 [RESET] 6a. Fetchuji zprávu ID={party_data['msg_id']}...")
             msg = await channel.fetch_message(party_data["msg_id"])
+            print(f"🔄 [RESET] 6b. Zpráva nalezena! Edituji...")
             await msg.edit(embed=idle_embed, view=IdleView())
-            print("✅ Party zpráva změněna na IDLE embed")
+            print("✅ [RESET] 6c. Party zpráva změněna na IDLE embed!")
         except discord.NotFound:
-            # Zpráva smazaná → vytvoř novou
+            print("⚠️ [RESET] 6x. Zpráva smazaná → vytváření nové...")
             msg = await channel.send(embed=idle_embed, view=IdleView())
             party_data["msg_id"] = msg.id
-            print("✅ Party zpráva smazána, vytvořena nová IDLE zpráva")
+            print(f"✅ [RESET] 6y. Nová IDLE zpráva vytvořena: {party_data['msg_id']}")
         except Exception as e:
-            print(f"❌ Chyba při editaci party zprávy: {e}")
+            print(f"❌ [RESET] 6z. KRITICKÁ CHYBA při editaci: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("⚠️ [RESET] 6. msg_id je None! Nemohu editovat!")
 
     # ✅ NAKONEC: Resetuj party data
     party_data["is_idle"] = True
@@ -363,7 +372,7 @@ async def reset_to_idle_state():
     party_data["timer_start"] = None
     party_data["timer_duration"] = None
 
-    print("✅ Party resetována - IDLE režim aktivní!")
+    print("✅ [RESET] 7. Party data resetována - IDLE režim aktivní!")
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
