@@ -278,7 +278,7 @@ class IdleView(View):
 
 
 async def start_timer(duration_seconds, is_completion=False):
-    """Spustí timer s live update"""
+    """Spustí timer s live update - OPRAVENO aby neupdatoval hned"""
     
     # Zruš starý update task
     if party_data["update_task"] is not None:
@@ -293,6 +293,9 @@ async def start_timer(duration_seconds, is_completion=False):
     # Spustí live update embedu
     async def live_update():
         try:
+            # ✅ Počkej 10 sekund před prvním updatem (create_new_party už updatel)
+            await asyncio.sleep(10)
+            
             while True:
                 remaining = get_remaining_time()
                 
@@ -422,14 +425,15 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     notif_msg = await channel.send(content="@everyone", embed=notif_embed)
     party_data["notif_msg_id"] = notif_msg.id
 
-    # Spustí 60-minutový timer
+    # ✅ SPUSTÍ TIMER NEJDŘÍV (ale live_update počká 10 sekund)
     await start_timer(60 * 60, is_completion=False)
 
+    # ✅ TEPRVE PAK updateuj embed (jednou)
     await update_party_embed()
 
 
 async def update_party_embed():
-    """Aktualizuje zprávu s party obsazením - ZJEDNODUŠENO"""
+    """Aktualizuje zprávu s party obsazením"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -506,20 +510,17 @@ async def update_party_embed():
 
     embed.set_footer(text="Klikni na 'Nová farma' pro reset")
 
-    # ✅ ZJEDNODUŠENÉ: Pokud msg_id existuje a zpráva existuje → edituj
-    # Jinak vytvoř novou
+    # Pokud msg_id existuje → edituj
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
-            # Zpráva existuje → EDITUJ
             await msg.edit(embed=embed, view=PartyView())
-            return  # ✅ DŮLEŽITÉ - Ukonči funkci, netvořit nový embed!
         except discord.NotFound:
             # Zpráva neexistuje → vytvoř novou
-            party_data["msg_id"] = None
-
-    # Vytvoř nový embed jen pokud msg_id je None
-    if party_data["msg_id"] is None:
+            msg = await channel.send(embed=embed, view=PartyView())
+            party_data["msg_id"] = msg.id
+    else:
+        # Vytvoř nový embed
         msg = await channel.send(embed=embed, view=PartyView())
         party_data["msg_id"] = msg.id
 
