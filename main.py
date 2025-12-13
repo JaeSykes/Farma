@@ -63,6 +63,7 @@ party_data = {
     "timer_duration": None,
     "is_completed": False,
     "update_lock": asyncio.Lock(),
+    "last_embed_update": 0,  # ✅ Tracking poslední aktualizace embedu
 }
 
 def count_filled_required_roles():
@@ -320,6 +321,7 @@ async def reset_to_idle_state():
     party_data["is_completed"] = False
     party_data["timer_start"] = None
     party_data["timer_duration"] = None
+    party_data["last_embed_update"] = 0
 
     print("✅ RESET: Hotovo!")
 
@@ -356,6 +358,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
     # ✅ NEJDŘÍVE: Nastav timer
     party_data["timer_start"] = int(datetime.now().timestamp())
     party_data["timer_duration"] = 5 * 60  # 5 minut
+    party_data["last_embed_update"] = 0
 
     party_data["is_idle"] = False
     party_data["lokace"] = lokace
@@ -396,7 +399,8 @@ async def create_initial_party_embed():
             f"**Zahájena:** {cas_display}\n\n"
             "Rovnoměrná dělba dropu dle CP pravidel\n\n"
             f"**Obsazení: {total}/9**\n"
-            f"\n⏱️ Farma se skládá... Timeout za {timer_display}"
+            f"\n⏱️ **Countdown:** {timer_display}\n"
+            f"*Po uplynutí doby bude sekvence převedena do spánkového režimu*"
         ),
         color=0x0099FF,
     )
@@ -446,7 +450,8 @@ async def update_party_embed():
                 f"**Zahájena:** {cas_display}\n\n"
                 "Rovnoměrná dělba dropu dle CP pravidel\n\n"
                 f"**Obsazení: {total}/9**\n"
-                f"\n⏱️ Farma se skládá... Timeout za {timer_display}"
+                f"\n⏱️ **Countdown:** {timer_display}\n"
+                f"*Po uplynutí doby bude sekvence převedena do spánkového režimu*"
             ),
             color=0x0099FF,
         )
@@ -523,6 +528,7 @@ async def update_party_embed():
                 # ✅ Nastav nový timer (15 minut)
                 party_data["timer_start"] = int(datetime.now().timestamp())
                 party_data["timer_duration"] = 15 * 60
+                party_data["last_embed_update"] = 0
             else:
                 party_data["is_completed"] = True
                 
@@ -535,17 +541,24 @@ async def update_party_embed():
                 completion_msg = await channel.send(embed=warning_embed)
                 party_data["completion_msg_ids"].append(completion_msg.id)
 
-# ✅✅✅ BACKGROUND LOOP - KONTROLA TIMEROU KAŽDÝCH 2 SEKUNDY ✅✅✅
-@tasks.loop(seconds=2)
+# ✅✅✅ BACKGROUND LOOP - KONTROLA TIMEROU A LIVE COUNTDOWN KAŽDOU SEKUNDU ✅✅✅
+@tasks.loop(seconds=1)
 async def timer_checker():
-    """Background loop který každé 2 sekundy kontroluje timeout"""
+    """Background loop který každou sekundu kontroluje timeout a updatuje countdown"""
     try:
-        # Pokud není idle a timer skončil → reset!
         if not party_data["is_idle"]:
             remaining = get_remaining_time()
+            
+            # ✅ TIMEOUT CHECK
             if remaining <= 0:
                 print(f"⏱️ [BACKGROUND LOOP] TIMEOUT DETEKOVÁN! Spouštím reset...")
                 await reset_to_idle_state()
+            else:
+                # ✅ LIVE COUNTDOWN UPDATE - Aktualizuj embed každou sekundu
+                current_time = int(datetime.now().timestamp())
+                if current_time != party_data["last_embed_update"]:
+                    party_data["last_embed_update"] = current_time
+                    await update_party_embed()
     except Exception as e:
         print(f"❌ [TIMER_CHECKER] Chyba: {e}")
 
