@@ -297,6 +297,11 @@ async def start_timer(duration_seconds, is_completion=False):
             await asyncio.sleep(10)
             
             while True:
+                # ✅ GUARD: Pokud je idle, zastav live update!
+                if party_data["is_idle"]:
+                    print("⏱️ Idle stav dosažen, live update zastaveno")
+                    break
+                
                 remaining = get_remaining_time()
                 
                 if remaining <= 0:
@@ -314,7 +319,7 @@ async def start_timer(duration_seconds, is_completion=False):
 
 
 async def reset_to_idle_state():
-    """Resetuje party do idle stavu - OPRAVENO aby se idle embed VŽDYCKY zobrazil"""
+    """Resetuje party do idle stavu - edituje embed na nudící se"""
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
@@ -336,7 +341,7 @@ async def reset_to_idle_state():
         except Exception as e:
             print(f"⚠️ Chyba při mazání completion zprávy: {e}")
 
-    # Resetuj party data
+    # Resetuj party data - DŮLEŽITÉ: is_idle = True PRVNÍ!
     party_data["lokace"] = None
     party_data["cas_timestamp"] = None
     party_data["sloty"] = {role: [] for role in ROLE_SLOTS}
@@ -348,29 +353,29 @@ async def reset_to_idle_state():
     party_data["timer_duration"] = None
     party_data["update_task"] = None
 
-    # ✅ Vytvoř idle embed
+    # ✅ Vytvoř IDLE embed
     idle_embed = discord.Embed(
-        title="😴 Nudí se mi",
+        title="😴 Nudím se",
         description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
         color=0x808080,
     )
 
-    # ✅ Pokud msg_id existuje → pokus se editovat
+    # ✅ Edituj existující zprávu na idle
     if party_data["msg_id"]:
         try:
             msg = await channel.fetch_message(party_data["msg_id"])
             await msg.edit(embed=idle_embed, view=IdleView())
-            print("✅ Party resetována do idle stavu (EDIT)")
+            print("✅ Party do idle stavu (EDIT zprávy)")
         except discord.NotFound:
-            # ✅ Zpráva neexistuje → vytvoř novou!
+            # Zpráva smazaná → vytvoř novou
             msg = await channel.send(embed=idle_embed, view=IdleView())
             party_data["msg_id"] = msg.id
-            print("✅ Party resetována do idle stavu (NEW zpráva)")
+            print("✅ Party do idle stavu (NEW zpráva)")
     else:
-        # ✅ msg_id je None → vytvoř novou
+        # Žádná zpráva → vytvoř novou
         msg = await channel.send(embed=idle_embed, view=IdleView())
         party_data["msg_id"] = msg.id
-        print("✅ Party resetována do idle stavu (NEW zpráva)")
+        print("✅ Party do idle stavu (NEW zpráva)")
 
 
 async def create_new_party(interaction: discord.Interaction, lokace: str):
@@ -438,7 +443,12 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
 
 
 async def update_party_embed():
-    """Aktualizuje zprávu s party obsazením"""
+    """Aktualizuje zprávu s party obsazením - OCHRANA: Nevolej v idle stavu!"""
+    # ✅ GUARD: Pokud je idle, nic neděláme!
+    if party_data["is_idle"]:
+        print("⏱️ Idle stav, update_party_embed zastaveno")
+        return
+    
     guild = bot.get_guild(SERVER_ID)
     channel = guild.get_channel(CHANNEL_ID) if guild else None
 
