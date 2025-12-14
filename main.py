@@ -96,7 +96,7 @@ class LokaceSelect(Select):
             for lokace in LOKACE.values()
         ]
         super().__init__(
-            placeholder="Vyber lokaci pro farmu...",
+            placeholder="Vyber lokaci pro parta...",
             min_values=1,
             max_values=1,
             options=options,
@@ -124,7 +124,7 @@ class RoleSelect(Select):
         if remaining <= 0 and not party_data["is_idle"]:
             print(f"⏱️ TIMEOUT DETEKOVÁN! Spouštím reset z RoleSelect...")
             await reset_to_idle_state()
-            await interaction.response.send_message("❌ Timeout! Farma byla resetována.", ephemeral=True)
+            await interaction.response.send_message("❌ Timeout! Parta byla resetována.", ephemeral=True)
             return
 
         role = self.values[0]
@@ -171,7 +171,7 @@ class ConfirmNewFarmView(View):
         self.interaction = interaction
         self.confirmed = False
 
-    @discord.ui.button(label="✅ Ano, začít farmu!", style=discord.ButtonStyle.green, custom_id="confirm_yes")
+    @discord.ui.button(label="✅ Ano, začít parta!", style=discord.ButtonStyle.green, custom_id="confirm_yes")
     async def confirm_yes(self, interaction: discord.Interaction, button: Button):
         if interaction.user != self.interaction.user:
             await interaction.response.send_message("❌ Nemáš právo potvrdit tuto akci!", ephemeral=True)
@@ -180,7 +180,7 @@ class ConfirmNewFarmView(View):
         self.confirmed = True
         await interaction.response.defer()
         embed = discord.Embed(
-            title="🌍 Vyber lokaci pro novou farmu",
+            title="🌍 Vyber lokaci pro novou parta",
             description="Kde chceš farmit?",
             color=0x0099FF,
         )
@@ -199,7 +199,7 @@ class ConfirmNewFarmView(View):
             await interaction.response.send_message("❌ Nemáš právo zrušit tuto akci!", ephemeral=True)
             return
 
-        await interaction.response.send_message("❌ Zahájení nové farmy zrušeno.", ephemeral=True)
+        await interaction.response.send_message("❌ Zahájení nové party zrušeno.", ephemeral=True)
         self.stop()
 
 class PartyView(View):
@@ -213,7 +213,7 @@ class PartyView(View):
         if remaining <= 0 and not party_data["is_idle"]:
             print(f"⏱️ TIMEOUT DETEKOVÁN! Spouštím reset z leave...")
             await reset_to_idle_state()
-            await interaction.response.send_message("❌ Timeout! Farma byla resetována.", ephemeral=True)
+            await interaction.response.send_message("❌ Timeout! Parta byla resetována.", ephemeral=True)
             return
 
         user = interaction.user
@@ -231,11 +231,11 @@ class PartyView(View):
         else:
             await interaction.response.send_message("❌ Nejsi v partě!", ephemeral=True)
 
-    @discord.ui.button(label="Nová farma", style=discord.ButtonStyle.blurple, custom_id="btn_new_party")
+    @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.blurple, custom_id="btn_new_party")
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
         embed = discord.Embed(
             title="⚠️ Jste si jistý?",
-            description="Chcete opravdu zahájit **novou farmu**?\n\nStará farma bude resetována.",
+            description="Chcete opravdu zahájit **novou parta**?\n\nStará parta bude resetována.",
             color=0xFFAA00,
         )
 
@@ -246,11 +246,11 @@ class IdleView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Nová farma", style=discord.ButtonStyle.blurple, custom_id="btn_new_party_idle")
+    @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.blurple, custom_id="btn_new_party_idle")
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
         embed = discord.Embed(
             title="⚠️ Jste si jistý?",
-            description="Chcete opravdu zahájit **novou farmu**?",
+            description="Chcete opravdu zahájit **novou parta**?",
             color=0xFFAA00,
         )
 
@@ -284,7 +284,7 @@ async def reset_to_idle_state():
 
     idle_embed = discord.Embed(
         title="😴 Nudím se",
-        description="Nikdo nic neskládá, já se nudím, pojď zahájit novou farmu!",
+        description="Nikdo nic neskládá, já se nudím, pojď založit novou parta!",
         color=0x808080,
     )
 
@@ -361,7 +361,7 @@ async def create_new_party(interaction: discord.Interaction, lokace: str):
             pass
 
     notif_embed = discord.Embed(
-        title="🎉 Skládá se nová farm parta",
+        title="🎉 Skládá se nová parta",
         description=f"do lokace **{lokace}**\n\nZakladatel: {interaction.user.mention}",
         color=0x00FF00,
     )
@@ -383,7 +383,7 @@ async def create_initial_party_embed():
     timer_display = format_timer(remaining_time)
 
     embed = discord.Embed(
-        title="🎮 Společná party farma",
+        title="🎮 Party Maker",
         description=(
             f"**Lokace:** {party_data['lokace']}\n"
             f"**Zahájena:** {cas_display}\n\n"
@@ -414,7 +414,7 @@ async def create_initial_party_embed():
 
     remaining_roles = [f"{role} (0/{max_slot})" for role, max_slot in ROLE_SLOTS.items()]
     embed.add_field(name="📋 ZBÝVAJÍCÍ SLOTY", value="\n".join(remaining_roles), inline=False)
-    embed.set_footer(text="Klikni na 'Nová farma' pro reset")
+    embed.set_footer(text="Klikni na 'Nová parta' pro reset")
 
     msg = await channel.send(embed=embed, view=PartyView())
     party_data["msg_id"] = msg.id
@@ -485,7 +485,7 @@ async def update_party_embed():
             remaining_text = "\n".join(remaining_roles)
             embed.add_field(name="📋 ZBÝVAJÍCÍ SLOTY", value=remaining_text, inline=False)
 
-        embed.set_footer(text="Klikni na 'Nová farma' pro reset")
+        embed.set_footer(text="Klikni na 'Nová parta' pro reset")
 
         if party_data["msg_id"]:
             try:
@@ -557,7 +557,7 @@ async def on_ready():
     if not timer_checker.is_running():
         timer_checker.start()
 
-@bot.tree.command(name="farma", description="Spustit party finder pro farmu")
+@bot.tree.command(name="farma", description="Spustit Party Maker")
 async def farma_cmd(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🌍 Vyber lokaci pro farmu",
