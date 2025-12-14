@@ -20,6 +20,8 @@ LOKACE = {
 "🌱 Seed of Annihilation": "Seed of Annihilation",
 "🏚️ TOP Cata/Necro": "TOP Cata/Necro",
 "⚒️ Forge of Gods": "Forge of Gods",
+"👹 Raid boss run": "Raid boss run",
+"🏆 PvP run": "PvP run",
 }
 
 ROLE_SLOTS = {
@@ -36,7 +38,6 @@ ROLE_SLOTS = {
 }
 
 REQUIRED_ROLES = {
-"💚 Healer": True,
 "🎵 Swordsinger": True,
 "🌟 Buffer": True,
 "💃 Bladedance": True,
@@ -47,9 +48,7 @@ ROLE_REQUIREMENTS = {
 5: 1,
 6: 2,
 7: 3,
-8: 4,
-9: 5,
-10: 5,
+9: 4,
 }
 
 party_data = {
@@ -411,7 +410,7 @@ description=(
 f"**Lokace:** {party_data['lokace']}\n"
 f"**Zahájena:** {cas_display}\n\n"
 "Rovnoměrná dělba dropu dle CP pravidel\n\n"
-f"**Obsazení: {total}/10**\n"
+f"**Obsazení: {total}/9**\n"
 f"\n⏱️ **Countdown:** {timer_display}\n"
 f"*Po uplynutí doby bude sekvence převedena do spánkového režimu*"
 ),
@@ -462,7 +461,7 @@ description=(
 f"**Lokace:** {party_data['lokace']}\n"
 f"**Zahájena:** {cas_display}\n\n"
 "Rovnoměrná dělba dropu dle CP pravidel\n\n"
-f"**Obsazení: {total}/10**\n"
+f"**Obsazení: {total}/9**\n"
 f"\n⏱️ **Countdown:** {timer_display}\n"
 f"*Po uplynutí doby bude sekvence převedena do spánkového režimu*"
 ),
@@ -520,7 +519,7 @@ msg = await channel.send(embed=embed, view=PartyView())
 party_data["msg_id"] = msg.id
 
 # FULL PARTY SIGNALIZACE
-if total == 10 and not party_data["is_completed"]:
+if total == 9 and not party_data["is_completed"]:
 if not missing_required:
 party_data["is_completed"] = True
 
@@ -547,7 +546,7 @@ party_data["is_completed"] = True
 
 missing_text = ", ".join(missing_required)
 warning_embed = discord.Embed(
-title="⚠️ Party (10/10) ale chybí role!",
+title="⚠️ Party (9/9) ale chybí role!",
 description=f"Parta je plná, ale chybí: {missing_text}\nNěkdo se musí odhlásit a nahradit jej!",
 color=0xFF9900,
 )
