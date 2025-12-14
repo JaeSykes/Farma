@@ -68,11 +68,11 @@ party_data = {
 }
 
 def count_filled_required_roles():
-count = 0
-for role in REQUIRED_ROLES.keys():
-if len(party_data["sloty"][role]) > 0:
-count += 1
-return count
+    count = 0
+    for role in REQUIRED_ROLES.keys():
+        if len(party_data["sloty"][role]) > 0:
+            count += 1
+    return count
 
 def get_total_members():
 return sum(len(members) for members in party_data["sloty"].values())
