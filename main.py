@@ -75,19 +75,19 @@ def count_filled_required_roles():
     return count
 
 def get_total_members():
-return sum(len(members) for members in party_data["sloty"].values())
+    return sum(len(members) for members in party_data["sloty"].values())
 
 def get_remaining_time():
-if party_data["timer_start"] is None or party_data["timer_duration"] is None:
-return 0
-elapsed = int(datetime.now().timestamp()) - party_data["timer_start"]
-remaining = party_data["timer_duration"] - elapsed
-return max(0, remaining)
+    if party_data["timer_start"] is None or party_data["timer_duration"] is None:
+        return 0
+    elapsed = int(datetime.now().timestamp()) - party_data["timer_start"]
+    remaining = party_data["timer_duration"] - elapsed
+    return max(0, remaining)
 
 def format_timer(seconds):
-minutes = seconds // 60
-secs = seconds % 60
-return f"{minutes}m {secs}s"
+    minutes = seconds // 60
+    secs = seconds % 60
+    return f"{minutes}m {secs}s"
 
 class LokaceSelect(Select):
 def __init__(self):
