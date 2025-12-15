@@ -208,76 +208,8 @@ ALLOWED_ROLE_IDS = [
     1398212336111714325,  # Člen
 ]
 
-class ManagePlayerSelect(Select):
-    def __init__(self):
-        guild = bot.get_guild(SERVER_ID)
-        if not guild:
-            options = [discord.SelectOption(label="Server nenalezen", value="none")]
-            super().__init__(
-                placeholder="Vybrat hráče...",
-                min_values=0,
-                max_values=1,
-                options=options,
-                disabled=True,
-            )
-            return
-        
-        all_members = [
-            m for m in guild.members 
-            if not m.bot and any(role.id in ALLOWED_ROLE_IDS for role in m.roles)
-        ]
-        
-        if not all_members:
-            options = [
-                discord.SelectOption(
-                    label="Žádní hráči s touto rolí",
-                    value="none",
-                    description="Nikdo z vybraných rolí nemá oprávnění"
-                )
-            ]
-        else:
-            options = [
-                discord.SelectOption(
-                    label=m.display_name,
-                    value=str(m.id)
-                )
-                for m in all_members[:25]
-            ]
-        
-        super().__init__(
-            placeholder="Vybrat hráče...",
-            min_values=0,
-            max_values=1,
-            options=options,
-        )
-
-class ManageActionSelect(Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="✅ Přihlásit", value="add"),
-            discord.SelectOption(label="❌ Odhlásit", value="remove"),
-            discord.SelectOption(label="↔️ Přesunout na roli", value="move"),
-        ]
-        super().__init__(
-            placeholder="Vybrat akci...",
-            min_values=0,
-            max_values=1,
-            options=options,
-        )
-
-class ManageRoleSelect(Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label=role, value=role) for role in ROLE_SLOTS.keys()
-        ]
-        super().__init__(
-            placeholder="Vybrat roli...",
-            min_values=0,
-            max_values=1,
-            options=options,
-        )
-
 class ManagePartyView(View):
+    """Správa party - nový JEDNODUCHÝ přístup s callbacky"""
     def __init__(self, founder_id: int):
         super().__init__(timeout=60)
         self.founder_id = founder_id
@@ -285,22 +217,96 @@ class ManagePartyView(View):
         self.selected_action = None
         self.selected_role = None
         
-        # Dynamické vytvoření selectů
-        self.add_item(ManagePlayerSelect())
-        self.add_item(ManageActionSelect())
-        self.add_item(ManageRoleSelect())
+        # Přidej selecty s callbacky
+        self.add_item(self.create_player_select())
+        self.add_item(self.create_action_select())
+        self.add_item(self.create_role_select())
 
-    async def on_player_select(self, values):
-        """Dynamicky volaná metoda když se vybere hráč"""
-        self.selected_player = values[0] if values else None
+    def create_player_select(self):
+        """Vytvoř hráčský select S callbackem"""
+        guild = bot.get_guild(SERVER_ID)
+        
+        if not guild:
+            options = [discord.SelectOption(label="Server nenalezen", value="none")]
+        else:
+            all_members = [
+                m for m in guild.members 
+                if not m.bot and any(role.id in ALLOWED_ROLE_IDS for role in m.roles)
+            ]
+            
+            if not all_members:
+                options = [discord.SelectOption(label="Žádní hráči dostupní", value="none")]
+            else:
+                options = [
+                    discord.SelectOption(label=m.display_name, value=str(m.id))
+                    for m in all_members[:25]
+                ]
 
-    async def on_action_select(self, values):
-        """Dynamicky volaná metoda když se vybere akce"""
-        self.selected_action = values[0] if values else None
+        select = Select(
+            placeholder="Vybrat hráče...",
+            min_values=0,
+            max_values=1,
+            options=options,
+        )
 
-    async def on_role_select(self, values):
-        """Dynamicky volaná metoda když se vybere role"""
-        self.selected_role = values[0] if values else None
+        async def player_callback(interaction: discord.Interaction):
+            if select.values:
+                val = select.values[0]
+                self.selected_player = int(val) if val != "none" else None
+            else:
+                self.selected_player = None
+            await interaction.response.defer()
+
+        select.callback = player_callback
+        return select
+
+    def create_action_select(self):
+        """Vytvoř akční select S callbackem"""
+        options = [
+            discord.SelectOption(label="✅ Přihlásit", value="add"),
+            discord.SelectOption(label="❌ Odhlásit", value="remove"),
+            discord.SelectOption(label="↔️ Přesunout na roli", value="move"),
+        ]
+
+        select = Select(
+            placeholder="Vybrat akci...",
+            min_values=0,
+            max_values=1,
+            options=options,
+        )
+
+        async def action_callback(interaction: discord.Interaction):
+            if select.values:
+                self.selected_action = select.values[0]
+            else:
+                self.selected_action = None
+            await interaction.response.defer()
+
+        select.callback = action_callback
+        return select
+
+    def create_role_select(self):
+        """Vytvoř roli select S callbackem"""
+        options = [
+            discord.SelectOption(label=role, value=role) for role in ROLE_SLOTS.keys()
+        ]
+
+        select = Select(
+            placeholder="Vybrat roli...",
+            min_values=0,
+            max_values=1,
+            options=options,
+        )
+
+        async def role_callback(interaction: discord.Interaction):
+            if select.values:
+                self.selected_role = select.values[0]
+            else:
+                self.selected_role = None
+            await interaction.response.defer()
+
+        select.callback = role_callback
+        return select
 
     @discord.ui.button(label="✅ Provést akci", style=discord.ButtonStyle.green, custom_id="btn_manage_execute")
     async def execute_button(self, interaction: discord.Interaction, button: Button):
@@ -308,49 +314,33 @@ class ManagePartyView(View):
             await interaction.response.send_message("❌ Jen zakladatel party!", ephemeral=True)
             return
 
+        # Kontrola co je vybráno
+        if not self.selected_player or not self.selected_action:
+            await interaction.response.send_message(
+                "❌ Vyberte hráče a akci!", 
+                ephemeral=True
+            )
+            return
+
+        if self.selected_action in ["add", "move"] and not self.selected_role:
+            await interaction.response.send_message(
+                "❌ Vyberte roli!", 
+                ephemeral=True
+            )
+            return
+
         guild = bot.get_guild(SERVER_ID)
         if not guild:
             await interaction.response.send_message("❌ Server nenalezen!", ephemeral=True)
             return
 
-        # Získej hodnoty z selectů
-        player_id = None
-        action = None
-        role = None
-
-        for item in self.children:
-            if isinstance(item, ManagePlayerSelect) and item.values:
-                try:
-                    val = item.values[0]
-                    if val != "none":
-                        player_id = int(val)
-                except (ValueError, IndexError):
-                    pass
-            elif isinstance(item, ManageActionSelect) and item.values:
-                try:
-                    action = item.values[0]
-                except IndexError:
-                    pass
-            elif isinstance(item, ManageRoleSelect) and item.values:
-                try:
-                    role = item.values[0]
-                except IndexError:
-                    pass
-
-        if not player_id or not action:
-            await interaction.response.send_message("❌ Vyberte hráče a akci!", ephemeral=True)
-            return
-
-        if action in ["add", "move"] and not role:
-            await interaction.response.send_message("❌ Vyberte roli!", ephemeral=True)
-            return
-
-        player = guild.get_member(player_id)
+        player = guild.get_member(self.selected_player)
         if not player:
             await interaction.response.send_message("❌ Hráč nenalezen!", ephemeral=True)
             return
 
-        if action == "remove":
+        # ODSTRANIT
+        if self.selected_action == "remove":
             found = False
             for r, members in party_data["sloty"].items():
                 if player in members:
@@ -359,25 +349,40 @@ class ManagePartyView(View):
                     break
             
             if found:
-                await interaction.response.send_message(f"✅ {player.mention} odhlášen z party!", ephemeral=True)
+                await interaction.response.send_message(
+                    f"✅ {player.mention} odhlášen z party!", 
+                    ephemeral=True
+                )
                 await update_party_embed()
             else:
-                await interaction.response.send_message(f"❌ {player.mention} není v partě!", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ {player.mention} není v partě!", 
+                    ephemeral=True
+                )
 
-        elif action == "add":
-            if len(party_data["sloty"][role]) >= ROLE_SLOTS[role]:
-                await interaction.response.send_message(f"❌ Role **{role}** je plná!", ephemeral=True)
+        # PŘIDAT
+        elif self.selected_action == "add":
+            if len(party_data["sloty"][self.selected_role]) >= ROLE_SLOTS[self.selected_role]:
+                await interaction.response.send_message(
+                    f"❌ Role **{self.selected_role}** je plná!", 
+                    ephemeral=True
+                )
                 return
 
+            # Odstraň hráče z ostatních rolí
             for r, members in party_data["sloty"].items():
                 if player in members:
                     members.remove(player)
 
-            party_data["sloty"][role].append(player)
-            await interaction.response.send_message(f"✅ {player.mention} přihlášen na **{role}**!", ephemeral=True)
+            party_data["sloty"][self.selected_role].append(player)
+            await interaction.response.send_message(
+                f"✅ {player.mention} přihlášen na **{self.selected_role}**!", 
+                ephemeral=True
+            )
             await update_party_embed()
 
-        elif action == "move":
+        # PŘESUNOUT
+        elif self.selected_action == "move":
             found = False
             for r, members in party_data["sloty"].items():
                 if player in members:
@@ -386,15 +391,24 @@ class ManagePartyView(View):
                     break
 
             if not found:
-                await interaction.response.send_message(f"❌ {player.mention} není v partě!", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ {player.mention} není v partě!", 
+                    ephemeral=True
+                )
                 return
 
-            if len(party_data["sloty"][role]) >= ROLE_SLOTS[role]:
-                await interaction.response.send_message(f"❌ Role **{role}** je plná!", ephemeral=True)
+            if len(party_data["sloty"][self.selected_role]) >= ROLE_SLOTS[self.selected_role]:
+                await interaction.response.send_message(
+                    f"❌ Role **{self.selected_role}** je plná!", 
+                    ephemeral=True
+                )
                 return
 
-            party_data["sloty"][role].append(player)
-            await interaction.response.send_message(f"✅ {player.mention} přesunut na **{role}**!", ephemeral=True)
+            party_data["sloty"][self.selected_role].append(player)
+            await interaction.response.send_message(
+                f"✅ {player.mention} přesunut na **{self.selected_role}**!", 
+                ephemeral=True
+            )
             await update_party_embed()
 
 class PartyView(View):
