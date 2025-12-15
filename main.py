@@ -288,24 +288,25 @@ class ManagePartyView(View):
         return select
 
     async def update_view_for_action(self, interaction: discord.Interaction):
-        """Aktualizuj View na základě vybrané akce - vytvoří NOVÝ View"""
-        # ✅ Vytvoř NOVÝ View místo editování starého
-        new_view = ManagePartyView(self.founder_id)
+        """Aktualizuj EXISTUJÍCÍ View - přidej role select když je potřeba"""
+        # ✅ Aktualizuj EXISTUJÍCÍ View (self), ne vytváření nového!
         
-        # Zkopíruj aktuální výběry do nového View
-        new_view.selected_player = self.selected_player
-        new_view.selected_action = self.selected_action
-        new_view.selected_role = self.selected_role
-        new_view.message = self.message
+        # Odstraň všechny children a znovu přidej only player + action selecty
+        self.clear_items()
+        self.add_item(self.create_player_select())
+        self.add_item(self.create_action_select())
         
-        # Přidej role select JEN když je potřeba
-        if new_view.selected_action in ["add", "move"]:
-            new_view.add_item(new_view.create_role_select())
+        # Přidej role select JEN když je selected_action == "add" nebo "move"
+        if self.selected_action in ["add", "move"]:
+            self.add_item(self.create_role_select())
         
-        # Aktualizuj zprávu s NOVÝM View
-        if new_view.message:
+        # Přidej tlačítko
+        self.add_item(self.execute_button)
+        
+        # Aktualizuj zprávu s TÍMTO updatovaným View
+        if self.message:
             try:
-                await new_view.message.edit(view=new_view)
+                await self.message.edit(view=self)
             except Exception as e:
                 print(f"⚠️ Chyba při editování zprávy: {e}")
         
