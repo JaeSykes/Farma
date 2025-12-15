@@ -277,18 +277,9 @@ class ManagePartyView(View):
     def __init__(self, founder_id: int):
         super().__init__(timeout=60)
         self.founder_id = founder_id
-        self.selected_player = None
-        self.selected_action = None
         self.add_item(ManagePlayerSelect())
         self.add_item(ManageActionSelect())
-
-    async def update_role_select(self):
-        for item in self.children:
-            if isinstance(item, ManageRoleSelect):
-                self.remove_item(item)
-        
-        if self.selected_action in ["add", "move"]:
-            self.add_item(ManageRoleSelect())
+        self.add_item(ManageRoleSelect())
 
     @discord.ui.button(label="✅ Provést akci", style=discord.ButtonStyle.green, custom_id="btn_manage_execute")
     async def execute_button(self, interaction: discord.Interaction, button: Button):
@@ -307,11 +298,22 @@ class ManagePartyView(View):
 
         for item in self.children:
             if isinstance(item, ManagePlayerSelect) and item.values:
-                player_id = int(item.values[0])
+                try:
+                    val = item.values[0]
+                    if val != "none":
+                        player_id = int(val)
+                except (ValueError, IndexError):
+                    pass
             elif isinstance(item, ManageActionSelect) and item.values:
-                action = item.values[0]
+                try:
+                    action = item.values[0]
+                except IndexError:
+                    pass
             elif isinstance(item, ManageRoleSelect) and item.values:
-                role = item.values[0]
+                try:
+                    role = item.values[0]
+                except IndexError:
+                    pass
 
         if not player_id or not action:
             await interaction.response.send_message("❌ Vyberte hráče a akci!", ephemeral=True)
@@ -366,9 +368,7 @@ class ManagePartyView(View):
                 return
 
             if len(party_data["sloty"][role]) >= ROLE_SLOTS[role]:
-                party_data["sloty"][role].append(player)
-                await interaction.response.send_message(f"❌ Role **{role}** je plná! {player.mention} vrácen do poslední role.", ephemeral=True)
-                await update_party_embed()
+                await interaction.response.send_message(f"❌ Role **{role}** je plná!", ephemeral=True)
                 return
 
             party_data["sloty"][role].append(player)
