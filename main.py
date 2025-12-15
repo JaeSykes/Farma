@@ -202,6 +202,157 @@ class ConfirmNewFarmView(View):
         await interaction.response.send_message("❌ Zahájení nové party zrušeno.", ephemeral=True)
         self.stop()
 
+class ManagePlayerSelect(Select):
+    def __init__(self):
+        guild = bot.get_guild(SERVER_ID)
+        if not guild:
+            return
+        
+        all_members = [m for m in guild.members if not m.bot]
+        options = [
+            discord.SelectOption(label=member.name, value=str(member.id))
+            for member in all_members[:25]
+        ]
+        
+        super().__init__(
+            placeholder="Vybrat hráče...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+class ManageActionSelect(Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="✅ Přihlásit", value="add"),
+            discord.SelectOption(label="❌ Odhlásit", value="remove"),
+            discord.SelectOption(label="↔️ Přesunout na roli", value="move"),
+        ]
+        super().__init__(
+            placeholder="Vybrat akci...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        action = self.values[0]
+        await interaction.response.defer()
+
+class ManageRoleSelect(Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label=role, value=role) for role in ROLE_SLOTS.keys()
+        ]
+        super().__init__(
+            placeholder="Vybrat roli...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+class ManagePartyView(View):
+    def __init__(self, founder_id: int):
+        super().__init__(timeout=60)
+        self.founder_id = founder_id
+        self.selected_player = None
+        self.selected_action = None
+        self.add_item(ManagePlayerSelect())
+        self.add_item(ManageActionSelect())
+
+    async def update_role_select(self):
+        for item in self.children:
+            if isinstance(item, ManageRoleSelect):
+                self.remove_item(item)
+        
+        if self.selected_action in ["add", "move"]:
+            self.add_item(ManageRoleSelect())
+
+    @discord.ui.button(label="✅ Provést akci", style=discord.ButtonStyle.green, custom_id="btn_manage_execute")
+    async def execute_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.founder_id:
+            await interaction.response.send_message("❌ Jen zakladatel party!", ephemeral=True)
+            return
+
+        guild = bot.get_guild(SERVER_ID)
+        if not guild:
+            await interaction.response.send_message("❌ Server nenalezen!", ephemeral=True)
+            return
+
+        player_id = None
+        action = None
+        role = None
+
+        for item in self.children:
+            if isinstance(item, ManagePlayerSelect) and item.values:
+                player_id = int(item.values[0])
+            elif isinstance(item, ManageActionSelect) and item.values:
+                action = item.values[0]
+            elif isinstance(item, ManageRoleSelect) and item.values:
+                role = item.values[0]
+
+        if not player_id or not action:
+            await interaction.response.send_message("❌ Vyberte hráče a akci!", ephemeral=True)
+            return
+
+        if action in ["add", "move"] and not role:
+            await interaction.response.send_message("❌ Vyberte roli!", ephemeral=True)
+            return
+
+        player = guild.get_member(player_id)
+        if not player:
+            await interaction.response.send_message("❌ Hráč nenalezen!", ephemeral=True)
+            return
+
+        if action == "remove":
+            found = False
+            for r, members in party_data["sloty"].items():
+                if player in members:
+                    members.remove(player)
+                    found = True
+                    break
+            
+            if found:
+                await interaction.response.send_message(f"✅ {player.mention} odhlášen z party!", ephemeral=True)
+                await update_party_embed()
+            else:
+                await interaction.response.send_message(f"❌ {player.mention} není v partě!", ephemeral=True)
+
+        elif action == "add":
+            if len(party_data["sloty"][role]) >= ROLE_SLOTS[role]:
+                await interaction.response.send_message(f"❌ Role **{role}** je plná!", ephemeral=True)
+                return
+
+            for r, members in party_data["sloty"].items():
+                if player in members:
+                    members.remove(player)
+
+            party_data["sloty"][role].append(player)
+            await interaction.response.send_message(f"✅ {player.mention} přihlášen na **{role}**!", ephemeral=True)
+            await update_party_embed()
+
+        elif action == "move":
+            found = False
+            for r, members in party_data["sloty"].items():
+                if player in members:
+                    members.remove(player)
+                    found = True
+                    break
+
+            if not found:
+                await interaction.response.send_message(f"❌ {player.mention} není v partě!", ephemeral=True)
+                return
+
+            if len(party_data["sloty"][role]) >= ROLE_SLOTS[role]:
+                party_data["sloty"][role].append(player)
+                await interaction.response.send_message(f"❌ Role **{role}** je plná! {player.mention} vrácen do poslední role.", ephemeral=True)
+                await update_party_embed()
+                return
+
+            party_data["sloty"][role].append(player)
+            await interaction.response.send_message(f"✅ {player.mention} přesunut na **{role}**!", ephemeral=True)
+            await update_party_embed()
+
 class PartyView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -230,6 +381,20 @@ class PartyView(View):
             await update_party_embed()
         else:
             await interaction.response.send_message("❌ Nejsi v partě!", ephemeral=True)
+
+    @discord.ui.button(label="Spravovat party", style=discord.ButtonStyle.gray, custom_id="btn_manage_party")
+    async def manage_party_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != party_data["founder_id"]:
+            await interaction.response.send_message("❌ Jen zakladatel party!", ephemeral=True)
+            return
+
+        manage_view = ManagePartyView(interaction.user.id)
+        embed = discord.Embed(
+            title="⚙️ Správa Party",
+            description="Vyberte hráče, akci a roli (pokud je třeba).",
+            color=0x00FF00,
+        )
+        await interaction.response.send_message(embed=embed, view=manage_view, ephemeral=True)
 
     @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.blurple, custom_id="btn_new_party")
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
@@ -433,7 +598,7 @@ async def update_party_embed():
         timer_display = format_timer(remaining_time)
 
         embed = discord.Embed(
-            title="🎮 Společná party farma",
+            title="🎮 Party Maker",
             description=(
                 f"**Lokace:** {party_data['lokace']}\n"
                 f"**Zahájena:** {cas_display}\n\n"
@@ -578,4 +743,4 @@ async def sync(ctx):
     await bot.tree.sync()
     await ctx.send("✅ Slash commands resyncnuté.")
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+bot.run(os.getenv("DISCORD_TOKEN")
