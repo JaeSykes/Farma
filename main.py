@@ -743,4 +743,4 @@ async def sync(ctx):
     await bot.tree.sync()
     await ctx.send("✅ Slash commands resyncnuté.")
 
-bot.run(os.getenv("DISCORD_TOKEN")
+bot.run(os.getenv("DISCORD_TOKEN"))
