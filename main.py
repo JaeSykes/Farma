@@ -547,8 +547,8 @@ async def reset_to_idle_state():
             print(f"⚠️ RESET: Completion chyba: {e}")
 
     idle_embed = discord.Embed(
-        title="😴 Nudím se",
-        description="Nikdo nic neskládá, já se nudím, pojď založit novou parta!",
+        title="😴 Nudím se..",
+        description="Nikdo nic neskládá, pojď založit novou partou a něco podniknout!",
         color=0x808080,
     )
 
@@ -651,7 +651,7 @@ async def create_initial_party_embed():
         description=(
             f"**Lokace:** {party_data['lokace']}\n"
             f"**Zahájena:** {cas_display}\n\n"
-            "Rovnoměrná dělba dropu dle CP pravidel\n\n"
+            "Parta je skládana v souladu s pravidly CP\n\n"
             f"**Obsazení: {total}/9**\n"
             f"\n⏱️ **Countdown:** {timer_display}\n"
             f"*Po uplynutí doby bude sekvence převedena do spánkového režimu*"
@@ -702,7 +702,7 @@ async def update_party_embed():
             description=(
                 f"**Lokace:** {party_data['lokace']}\n"
                 f"**Zahájena:** {cas_display}\n\n"
-                "Rovnoměrná dělba dropu dle CP pravidel\n\n"
+                "Parta je skládaná v souladu s **pravidly CP** a to včetně případné dělby dropu. Během konání **dbej** pokynu zakladatele party / Party leadera. Měj **připravenou postavu** včetně veškerých consumables a **buď na discordu** pro případnou komunikaci a nezdržuješ celou partu. __Jakmile bude parta ready ihned se vyrazí.__ \n\n"
                 f"**Obsazení: {total}/9**\n"
                 f"\n⏱️ **Countdown:** {timer_display}\n"
                 f"*Po uplynutí doby bude sekvence převedena do spánkového režimu*"
