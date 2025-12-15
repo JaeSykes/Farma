@@ -278,10 +278,8 @@ class ManagePartyView(View):
         async def action_callback(interaction: discord.Interaction):
             if select.values:
                 self.selected_action = select.values[0]
-                self.role_select.disabled = (self.selected_action == "remove")
             else:
                 self.selected_action = None
-                self.role_select.disabled = True
             await interaction.response.defer()
 
         select.callback = action_callback
@@ -413,6 +411,31 @@ class ManagePartyView(View):
             )
             await update_party_embed()
 
+class ConfirmEndPartyView(View):
+    def __init__(self, interaction: discord.Interaction):
+        super().__init__(timeout=30)
+        self.interaction = interaction
+
+    @discord.ui.button(label="✅ Ano, ukončit", style=discord.ButtonStyle.green, custom_id="confirm_end_yes")
+    async def confirm_yes(self, interaction: discord.Interaction, button: Button):
+        if interaction.user != self.interaction.user:
+            await interaction.response.send_message("❌ Nemáš právo!", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        print(f"🛑 Zakladatel {interaction.user} ukončil party!")
+        await reset_to_idle_state()
+        self.stop()
+
+    @discord.ui.button(label="❌ Ne, zrušit", style=discord.ButtonStyle.red, custom_id="confirm_end_no")
+    async def confirm_no(self, interaction: discord.Interaction, button: Button):
+        if interaction.user != self.interaction.user:
+            await interaction.response.send_message("❌ Nemáš právo!", ephemeral=True)
+            return
+
+        await interaction.response.send_message("❌ Ukončení party zrušeno.", ephemeral=True)
+        self.stop()
+
 class PartyView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -442,7 +465,7 @@ class PartyView(View):
         else:
             await interaction.response.send_message("❌ Nejsi v partě!", ephemeral=True)
 
-    @discord.ui.button(label="Spravovat party", style=discord.ButtonStyle.gray, custom_id="btn_manage_party")
+    @discord.ui.button(label="Spravovat party", style=discord.ButtonStyle.blurple, custom_id="btn_manage_party")
     async def manage_party_button(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != party_data["founder_id"]:
             await interaction.response.send_message("❌ Jen zakladatel party!", ephemeral=True)
@@ -456,7 +479,7 @@ class PartyView(View):
         )
         await interaction.response.send_message(embed=embed, view=manage_view, ephemeral=True)
 
-    @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.blurple, custom_id="btn_new_party")
+    @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.green, custom_id="btn_new_party")
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
         embed = discord.Embed(
             title="⚠️ Jste si jistý?",
@@ -465,6 +488,21 @@ class PartyView(View):
         )
 
         confirm_view = ConfirmNewFarmView(interaction)
+        await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
+
+    @discord.ui.button(label="🛑 Ukončení party", style=discord.ButtonStyle.red, custom_id="btn_end_party")
+    async def end_party_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != party_data["founder_id"]:
+            await interaction.response.send_message("❌ Jen zakladatel party!", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="⚠️ Jste si jistý?",
+            description="Chcete opravdu **UKONČIT party**?\n\nBude převedena do IDLE režimu.",
+            color=0xFF0000,
+        )
+
+        confirm_view = ConfirmEndPartyView(interaction)
         await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
 
 class IdleView(View):
