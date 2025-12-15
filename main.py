@@ -230,7 +230,7 @@ class ManagePlayerSelect(Select):
         else:
             options = [
                 discord.SelectOption(
-                    label=m.display_name,  # Server nickname
+                    label=m.display_name,
                     value=str(m.id)
                 )
                 for m in all_members[:25]
@@ -256,10 +256,6 @@ class ManageActionSelect(Select):
             max_values=1,
             options=options,
         )
-    
-    async def callback(self, interaction: discord.Interaction):
-        action = self.values[0]
-        await interaction.response.defer()
 
 class ManageRoleSelect(Select):
     def __init__(self):
