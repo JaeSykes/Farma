@@ -212,6 +212,14 @@ class ManagePlayerSelect(Select):
     def __init__(self):
         guild = bot.get_guild(SERVER_ID)
         if not guild:
+            options = [discord.SelectOption(label="Server nenalezen", value="none")]
+            super().__init__(
+                placeholder="Vybrat hráče...",
+                min_values=0,
+                max_values=1,
+                options=options,
+                disabled=True,
+            )
             return
         
         all_members = [
@@ -238,7 +246,7 @@ class ManagePlayerSelect(Select):
         
         super().__init__(
             placeholder="Vybrat hráče...",
-            min_values=1,
+            min_values=0,
             max_values=1,
             options=options,
         )
@@ -252,7 +260,7 @@ class ManageActionSelect(Select):
         ]
         super().__init__(
             placeholder="Vybrat akci...",
-            min_values=1,
+            min_values=0,
             max_values=1,
             options=options,
         )
@@ -264,7 +272,7 @@ class ManageRoleSelect(Select):
         ]
         super().__init__(
             placeholder="Vybrat roli...",
-            min_values=1,
+            min_values=0,
             max_values=1,
             options=options,
         )
@@ -273,9 +281,26 @@ class ManagePartyView(View):
     def __init__(self, founder_id: int):
         super().__init__(timeout=60)
         self.founder_id = founder_id
+        self.selected_player = None
+        self.selected_action = None
+        self.selected_role = None
+        
+        # Dynamické vytvoření selectů
         self.add_item(ManagePlayerSelect())
         self.add_item(ManageActionSelect())
         self.add_item(ManageRoleSelect())
+
+    async def on_player_select(self, values):
+        """Dynamicky volaná metoda když se vybere hráč"""
+        self.selected_player = values[0] if values else None
+
+    async def on_action_select(self, values):
+        """Dynamicky volaná metoda když se vybere akce"""
+        self.selected_action = values[0] if values else None
+
+    async def on_role_select(self, values):
+        """Dynamicky volaná metoda když se vybere role"""
+        self.selected_role = values[0] if values else None
 
     @discord.ui.button(label="✅ Provést akci", style=discord.ButtonStyle.green, custom_id="btn_manage_execute")
     async def execute_button(self, interaction: discord.Interaction, button: Button):
@@ -288,6 +313,7 @@ class ManagePartyView(View):
             await interaction.response.send_message("❌ Server nenalezen!", ephemeral=True)
             return
 
+        # Získej hodnoty z selectů
         player_id = None
         action = None
         role = None
