@@ -209,28 +209,21 @@ ALLOWED_ROLE_IDS = [
 ]
 
 class ManagePartyView(View):
-    """Správa party - DYNAMICKÉ selecty"""
-    def __init__(self, founder_id: int, selected_player=None, selected_action=None, selected_role=None, message=None):
+    """Správa party - STATICKÁ struktura (bez dynamických selectů)"""
+    def __init__(self, founder_id: int):
         super().__init__(timeout=60)
         self.founder_id = founder_id
-        self.selected_player = selected_player
-        self.selected_action = selected_action
-        self.selected_role = selected_role
-        self.message = message
+        self.selected_player = None
+        self.selected_action = None
+        self.selected_role = None
         
-        # Přidej selecty s callbacky
+        # Přidej všechny selecty včetně role selectu VŽDY
         self.add_item(self.create_player_select())
         self.add_item(self.create_action_select())
-        
-        # PŘIDEJ role select JEN HNED, pokud je selected_action "add" nebo "move"
-        if self.selected_action in ["add", "move"]:
-            self.add_item(self.create_role_select())
-        
-        # Přidej tlačítko
-        self.add_item(self.execute_button)
+        self.add_item(self.create_role_select())
 
     def create_player_select(self):
-        """Vytvoř hráčský select S callbackem"""
+        """Vytvoř hráčský select"""
         guild = bot.get_guild(SERVER_ID)
         
         if not guild:
@@ -268,7 +261,7 @@ class ManagePartyView(View):
         return select
 
     def create_action_select(self):
-        """Vytvoř akční select S callbackem - DYNAMICKY aktualizuje View"""
+        """Vytvoř akční select"""
         options = [
             discord.SelectOption(label="✅ Přihlásit", value="add"),
             discord.SelectOption(label="❌ Odhlásit", value="remove"),
@@ -287,37 +280,13 @@ class ManagePartyView(View):
                 self.selected_action = select.values[0]
             else:
                 self.selected_action = None
-            
-            # DYNAMICKY AKTUALIZUJ VIEW - vytvoř nový View s novými items
-            await self.update_view_for_action(interaction)
+            await interaction.response.defer()
 
         select.callback = action_callback
         return select
 
-    async def update_view_for_action(self, interaction: discord.Interaction):
-        """Vytvoř NOVÝ View s rolí selectem pokud je potřeba"""
-        # ✅ Vytvoř NOVÝ ManagePartyView (čistý View)
-        new_view = ManagePartyView(
-            self.founder_id,
-            selected_player=self.selected_player,
-            selected_action=self.selected_action,
-            selected_role=self.selected_role,
-            message=self.message
-        )
-        
-        # Aktualizuj zprávu s NOVÝM View
-        if self.message:
-            try:
-                await self.message.edit(view=new_view)
-                # Aktualizuj referenci na nový View v message
-                new_view.message = self.message
-            except Exception as e:
-                print(f"⚠️ Chyba při editování zprávy: {e}")
-        
-        await interaction.response.defer()
-
     def create_role_select(self):
-        """Vytvoř roli select S callbackem"""
+        """Vytvoř roli select"""
         options = [
             discord.SelectOption(label=role, value=role) for role in ROLE_SLOTS.keys()
         ]
@@ -480,11 +449,10 @@ class PartyView(View):
         manage_view = ManagePartyView(interaction.user.id)
         embed = discord.Embed(
             title="⚙️ Správa Party",
-            description="Vyberte hráče a akci.",
+            description="Vyberte hráče, akci a roli (pokud je potřeba).",
             color=0x00FF00,
         )
-        msg = await interaction.response.send_message(embed=embed, view=manage_view, ephemeral=True)
-        manage_view.message = msg
+        await interaction.response.send_message(embed=embed, view=manage_view, ephemeral=True)
 
     @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.blurple, custom_id="btn_new_party")
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
