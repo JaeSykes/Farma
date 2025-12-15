@@ -210,17 +210,24 @@ ALLOWED_ROLE_IDS = [
 
 class ManagePartyView(View):
     """Správa party - DYNAMICKÉ selecty"""
-    def __init__(self, founder_id: int):
+    def __init__(self, founder_id: int, selected_player=None, selected_action=None, selected_role=None, message=None):
         super().__init__(timeout=60)
         self.founder_id = founder_id
-        self.selected_player = None
-        self.selected_action = None
-        self.selected_role = None
-        self.message = None  # Budeme upravovat zprávu
+        self.selected_player = selected_player
+        self.selected_action = selected_action
+        self.selected_role = selected_role
+        self.message = message
         
         # Přidej selecty s callbacky
         self.add_item(self.create_player_select())
         self.add_item(self.create_action_select())
+        
+        # PŘIDEJ role select JEN HNED, pokud je selected_action "add" nebo "move"
+        if self.selected_action in ["add", "move"]:
+            self.add_item(self.create_role_select())
+        
+        # Přidej tlačítko
+        self.add_item(self.execute_button)
 
     def create_player_select(self):
         """Vytvoř hráčský select S callbackem"""
@@ -281,32 +288,29 @@ class ManagePartyView(View):
             else:
                 self.selected_action = None
             
-            # DYNAMICKY AKTUALIZUJ VIEW - přidej/odstraň role select
+            # DYNAMICKY AKTUALIZUJ VIEW - vytvoř nový View s novými items
             await self.update_view_for_action(interaction)
 
         select.callback = action_callback
         return select
 
     async def update_view_for_action(self, interaction: discord.Interaction):
-        """Aktualizuj EXISTUJÍCÍ View - přidej role select když je potřeba"""
-        # ✅ Aktualizuj EXISTUJÍCÍ View (self), ne vytváření nového!
+        """Vytvoř NOVÝ View s rolí selectem pokud je potřeba"""
+        # ✅ Vytvoř NOVÝ ManagePartyView (čistý View)
+        new_view = ManagePartyView(
+            self.founder_id,
+            selected_player=self.selected_player,
+            selected_action=self.selected_action,
+            selected_role=self.selected_role,
+            message=self.message
+        )
         
-        # Odstraň všechny children a znovu přidej only player + action selecty
-        self.clear_items()
-        self.add_item(self.create_player_select())
-        self.add_item(self.create_action_select())
-        
-        # Přidej role select JEN když je selected_action == "add" nebo "move"
-        if self.selected_action in ["add", "move"]:
-            self.add_item(self.create_role_select())
-        
-        # Přidej tlačítko
-        self.add_item(self.execute_button)
-        
-        # Aktualizuj zprávu s TÍMTO updatovaným View
+        # Aktualizuj zprávu s NOVÝM View
         if self.message:
             try:
-                await self.message.edit(view=self)
+                await self.message.edit(view=new_view)
+                # Aktualizuj referenci na nový View v message
+                new_view.message = self.message
             except Exception as e:
                 print(f"⚠️ Chyba při editování zprávy: {e}")
         
