@@ -219,13 +219,22 @@ class ManagePlayerSelect(Select):
             if not m.bot and any(role.id in ALLOWED_ROLE_IDS for role in m.roles)
         ]
         
-        options = [
-            discord.SelectOption(
-                label=m.display_name,  # Server nickname
-                value=str(m.id)
-            )
-            for m in all_members[:25]
-        ]
+        if not all_members:
+            options = [
+                discord.SelectOption(
+                    label="Žádní hráči s touto rolí",
+                    value="none",
+                    description="Nikdo z vybraných rolí nemá oprávnění"
+                )
+            ]
+        else:
+            options = [
+                discord.SelectOption(
+                    label=m.display_name,  # Server nickname
+                    value=str(m.id)
+                )
+                for m in all_members[:25]
+            ]
         
         super().__init__(
             placeholder="Vybrat hráče...",
