@@ -278,8 +278,10 @@ class ManagePartyView(View):
         async def action_callback(interaction: discord.Interaction):
             if select.values:
                 self.selected_action = select.values[0]
+                self.role_select.disabled = (self.selected_action == "remove")
             else:
                 self.selected_action = None
+                self.role_select.disabled = True
             await interaction.response.defer()
 
         select.callback = action_callback
