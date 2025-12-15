@@ -202,16 +202,29 @@ class ConfirmNewFarmView(View):
         await interaction.response.send_message("❌ Zahájení nové party zrušeno.", ephemeral=True)
         self.stop()
 
+ALLOWED_ROLE_IDS = [
+    1397286685544284361,  # Friend of CP
+    1397286545379033219,  # Nováček
+    1398212336111714325,  # Člen
+]
+
 class ManagePlayerSelect(Select):
     def __init__(self):
         guild = bot.get_guild(SERVER_ID)
         if not guild:
             return
         
-        all_members = [m for m in guild.members if not m.bot]
+        all_members = [
+            m for m in guild.members 
+            if not m.bot and any(role.id in ALLOWED_ROLE_IDS for role in m.roles)
+        ]
+        
         options = [
-            discord.SelectOption(label=member.name, value=str(member.id))
-            for member in all_members[:25]
+            discord.SelectOption(
+                label=m.display_name,  # Server nickname
+                value=str(m.id)
+            )
+            for m in all_members[:25]
         ]
         
         super().__init__(
