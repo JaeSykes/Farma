@@ -288,22 +288,26 @@ class ManagePartyView(View):
         return select
 
     async def update_view_for_action(self, interaction: discord.Interaction):
-        """Aktualizuj View na základě vybrané akce"""
-        # Vyčisti všechny selecty kromě prvních dvou (player a action)
-        new_children = [self.children[i] for i in range(min(2, len(self.children)))]
+        """Aktualizuj View na základě vybrané akce - vytvoří NOVÝ View"""
+        # ✅ Vytvoř NOVÝ View místo editování starého
+        new_view = ManagePartyView(self.founder_id)
+        
+        # Zkopíruj aktuální výběry do nového View
+        new_view.selected_player = self.selected_player
+        new_view.selected_action = self.selected_action
+        new_view.selected_role = self.selected_role
+        new_view.message = self.message
         
         # Přidej role select JEN když je potřeba
-        if self.selected_action in ["add", "move"]:
-            new_children.append(self.create_role_select())
+        if new_view.selected_action in ["add", "move"]:
+            new_view.add_item(new_view.create_role_select())
         
-        # Přidej tlačítko
-        new_children.append(self.execute_button)
-        
-        self.children = new_children
-        
-        # Aktualizuj zprávu
-        if self.message:
-            await self.message.edit(view=self)
+        # Aktualizuj zprávu s NOVÝM View
+        if new_view.message:
+            try:
+                await new_view.message.edit(view=new_view)
+            except Exception as e:
+                print(f"⚠️ Chyba při editování zprávy: {e}")
         
         await interaction.response.defer()
 
