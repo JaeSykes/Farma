@@ -437,8 +437,9 @@ class ConfirmEndPartyView(View):
         self.stop()
 
 class PartyView(View):
-    def __init__(self):
+    def __init__(self, is_founder: bool):
         super().__init__(timeout=None)
+        self.is_founder = is_founder
         self.add_item(RoleSelect())
 
     @discord.ui.button(label="Odhlásit se", style=discord.ButtonStyle.red, custom_id="btn_leave")
@@ -509,7 +510,7 @@ class IdleView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.blurple, custom_id="btn_new_party_idle")
+    @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.green, custom_id="btn_new_party_idle")
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
         embed = discord.Embed(
             title="⚠️ Jste si jistý?",
@@ -679,7 +680,8 @@ async def create_initial_party_embed():
     embed.add_field(name="📋 ZBÝVAJÍCÍ SLOTY", value="\n".join(remaining_roles), inline=False)
     embed.set_footer(text="Klikni na 'Nová parta' pro reset")
 
-    msg = await channel.send(embed=embed, view=PartyView())
+    is_founder = True
+    msg = await channel.send(embed=embed, view=PartyView(is_founder))
     party_data["msg_id"] = msg.id
 
 async def update_party_embed():
@@ -752,10 +754,12 @@ async def update_party_embed():
 
         if party_data["msg_id"]:
             try:
+                is_founder = True
                 msg = await channel.fetch_message(party_data["msg_id"])
-                await msg.edit(embed=embed, view=PartyView())
+                await msg.edit(embed=embed, view=PartyView(is_founder))
             except discord.NotFound:
-                msg = await channel.send(embed=embed, view=PartyView())
+                is_founder = True
+                msg = await channel.send(embed=embed, view=PartyView(is_founder))
                 party_data["msg_id"] = msg.id
 
         if total == 9 and not party_data["is_completed"]:
