@@ -209,18 +209,18 @@ ALLOWED_ROLE_IDS = [
 ]
 
 class ManagePartyView(View):
-    """Správa party - nový JEDNODUCHÝ přístup s callbacky"""
+    """Správa party - DYNAMICKÉ selecty"""
     def __init__(self, founder_id: int):
         super().__init__(timeout=60)
         self.founder_id = founder_id
         self.selected_player = None
         self.selected_action = None
         self.selected_role = None
+        self.message = None  # Budeme upravovat zprávu
         
         # Přidej selecty s callbacky
         self.add_item(self.create_player_select())
         self.add_item(self.create_action_select())
-        self.add_item(self.create_role_select())
 
     def create_player_select(self):
         """Vytvoř hráčský select S callbackem"""
@@ -261,7 +261,7 @@ class ManagePartyView(View):
         return select
 
     def create_action_select(self):
-        """Vytvoř akční select S callbackem"""
+        """Vytvoř akční select S callbackem - DYNAMICKY aktualizuje View"""
         options = [
             discord.SelectOption(label="✅ Přihlásit", value="add"),
             discord.SelectOption(label="❌ Odhlásit", value="remove"),
@@ -280,10 +280,32 @@ class ManagePartyView(View):
                 self.selected_action = select.values[0]
             else:
                 self.selected_action = None
-            await interaction.response.defer()
+            
+            # DYNAMICKY AKTUALIZUJ VIEW - přidej/odstraň role select
+            await self.update_view_for_action(interaction)
 
         select.callback = action_callback
         return select
+
+    async def update_view_for_action(self, interaction: discord.Interaction):
+        """Aktualizuj View na základě vybrané akce"""
+        # Vyčisti všechny selecty kromě prvních dvou (player a action)
+        new_children = [self.children[i] for i in range(min(2, len(self.children)))]
+        
+        # Přidej role select JEN když je potřeba
+        if self.selected_action in ["add", "move"]:
+            new_children.append(self.create_role_select())
+        
+        # Přidej tlačítko
+        new_children.append(self.execute_button)
+        
+        self.children = new_children
+        
+        # Aktualizuj zprávu
+        if self.message:
+            await self.message.edit(view=self)
+        
+        await interaction.response.defer()
 
     def create_role_select(self):
         """Vytvoř roli select S callbackem"""
@@ -449,10 +471,11 @@ class PartyView(View):
         manage_view = ManagePartyView(interaction.user.id)
         embed = discord.Embed(
             title="⚙️ Správa Party",
-            description="Vyberte hráče, akci a roli (pokud je třeba).",
+            description="Vyberte hráče a akci.",
             color=0x00FF00,
         )
-        await interaction.response.send_message(embed=embed, view=manage_view, ephemeral=True)
+        msg = await interaction.response.send_message(embed=embed, view=manage_view, ephemeral=True)
+        manage_view.message = msg
 
     @discord.ui.button(label="Nová parta", style=discord.ButtonStyle.blurple, custom_id="btn_new_party")
     async def new_party_button(self, interaction: discord.Interaction, button: Button):
